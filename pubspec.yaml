@@ -16,7 +16,7 @@ dependencies:
   provider: ^6.1.2
 
   # Audio recording
-  record: ^5.1.2
+  record: ^6.2.1
 
   # On-device / native speech-to-text (live transcription)
   speech_to_text: ^6.6.2
