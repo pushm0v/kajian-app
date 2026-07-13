@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Generate the Kajian Notes app icon set from a single vector definition.
 
-Concept: a pencil flanked by soundwaves — listening on both sides, writing in
-the middle — on the app's teal gradient with gold/cream accents echoing
-traditional Islamic art.
+Concept: a microphone whose grille is an open book (Qur'an / kitab), enclosed by
+a mosque onion-arch and topped with a crescent and star — recording, studying,
+and Islamic identity in one mark — on the app's soft mint-teal gradient.
 
 Outputs (into ../assets/icon):
   app_icon.svg              master vector (rounded, with background)
@@ -26,65 +26,82 @@ import cairosvg
 CX = 512
 
 # Palette
-CREAM = "#FFF7E6"
-GOLD = "#EAC57B"
-GOLD_D = "#D8A94E"
-TEALG = "#0E6E63"
+WHITE = "#FFFFFF"
+BOOKLINE = "#5FBEAA"   # soft teal for the open-book text lines
+STROKE_W = 16          # arch / mic-arm line weight
+
+# Vertical offset applied to the whole glyph so it centres in the canvas.
+OY = 158
 
 
-def sound_arc(r, side, spread=42, cy=512):
-    a0, a1 = math.radians(-spread), math.radians(spread)
-    if side == "R":
-        x0, y0 = CX + r * math.cos(a0), cy + r * math.sin(a0)
-        x1, y1 = CX + r * math.cos(a1), cy + r * math.sin(a1)
-        return f"M {x0:.1f} {y0:.1f} A {r} {r} 0 0 1 {x1:.1f} {y1:.1f}"
-    x0, y0 = CX - r * math.cos(a0), cy + r * math.sin(a0)
-    x1, y1 = CX - r * math.cos(a1), cy + r * math.sin(a1)
-    return f"M {x0:.1f} {y0:.1f} A {r} {r} 0 0 0 {x1:.1f} {y1:.1f}"
+def star(cx, cy, r_out, r_in, points=5, rot=-90):
+    pts = []
+    for i in range(points * 2):
+        r = r_out if i % 2 == 0 else r_in
+        a = math.radians(rot + i * 180.0 / points)
+        pts.append(f"{cx + r*math.cos(a):.1f} {cy + r*math.sin(a):.1f}")
+    return "M " + " L ".join(pts) + " Z"
 
 
 def glyph(mono=False):
-    cream = gold = gold_d = "#FFFFFF" if mono else None
-    cream = cream or CREAM
-    gold = gold or GOLD
-    gold_d = gold_d or GOLD_D
+    white = WHITE
+    line = WHITE if mono else BOOKLINE
 
-    # Soundwaves flanking the pencil — the audio/listening half of the app.
-    waves = "\n".join(
-        f'<path d="{sound_arc(r, s)}" fill="none" stroke="{gold}" '
-        f'stroke-width="{w}" stroke-linecap="round" opacity="{op}"/>'
-        for r, w, op in [(215, 20, 0.85), (268, 16, 0.5)]
-        for s in ("L", "R")
+    # Crescent + star finial — the Islamic/kajian identity.
+    crescent = (f'<path d="M 500 96 A 40 40 0 1 0 536 148 '
+                f'A 30 30 0 1 1 500 96 Z" fill="{white}"/>')
+    star_el = f'<path d="{star(540, 118, 20, 8)}" fill="{white}"/>'
+
+    # Onion arch enclosing the mic head — the mosque/mihrab silhouette.
+    arch = (f'<path d="M 418 366 '
+            f'C 396 312 408 248 460 220 '
+            f'C 482 206 500 202 512 200 '
+            f'C 524 202 542 206 564 220 '
+            f'C 616 248 628 312 606 366" '
+            f'fill="none" stroke="{white}" stroke-width="{STROKE_W}" '
+            f'stroke-linecap="round"/>')
+    finial = f'<circle cx="512" cy="186" r="9" fill="{white}"/>'
+
+    # Mic holder arms hugging the book sides, plus stem + base.
+    arms = (f'<path d="M 405 372 C 372 406 372 456 405 492" '
+            f'fill="none" stroke="{white}" stroke-width="{STROKE_W}" '
+            f'stroke-linecap="round"/>'
+            f'<path d="M 619 372 C 652 406 652 456 619 492" '
+            f'fill="none" stroke="{white}" stroke-width="{STROKE_W}" '
+            f'stroke-linecap="round"/>')
+    stem = (f'<line x1="512" y1="476" x2="512" y2="558" stroke="{white}" '
+            f'stroke-width="{STROKE_W}" stroke-linecap="round"/>')
+    base = (f'<line x1="452" y1="568" x2="572" y2="568" stroke="{white}" '
+            f'stroke-width="{STROKE_W}" stroke-linecap="round"/>')
+
+    # Open book = the mic grille (Qur'an / kitab being studied): spine dips,
+    # pages fan up and out.
+    book = (f'<path d="M 512 388 Q 468 356 405 360 L 416 452 '
+            f'Q 464 472 512 468 Z" fill="{white}"/>'
+            f'<path d="M 512 388 Q 556 356 619 360 L 608 452 '
+            f'Q 560 472 512 468 Z" fill="{white}"/>')
+    spine = ("" if mono else
+             f'<line x1="512" y1="392" x2="512" y2="466" stroke="{line}" '
+             f'stroke-width="7" stroke-linecap="round" opacity="0.6"/>')
+    booklines = "" if mono else "\n".join(
+        f'<line x1="{xo}" y1="{yo+6}" x2="498" y2="{yo}" stroke="{line}" '
+        f'stroke-width="7" stroke-linecap="round"/>'
+        f'<line x1="{1024-xo}" y1="{yo+6}" x2="526" y2="{yo}" stroke="{line}" '
+        f'stroke-width="7" stroke-linecap="round"/>'
+        for xo, yo in [(430, 402), (426, 422), (424, 442)]
     )
 
-    # Pencil pointing down — the note-taking half of the app.
-    eraser = (f'<rect x="447" y="240" width="130" height="76" rx="26" '
-              f'fill="{gold}"/>')
-    ferrule = f'<rect x="447" y="310" width="130" height="32" fill="{gold_d}"/>'
-    body = f'<rect x="447" y="342" width="130" height="290" fill="{cream}"/>'
-    facets = "\n".join(
-        f'<line x1="{x}" y1="358" x2="{x}" y2="618" stroke="{TEALG}" '
-        f'stroke-width="8" stroke-linecap="round" opacity="0.35"/>'
-        for x in (490, 534)
+    inner = "\n".join(
+        [crescent, star_el, arch, finial, arms, stem, base, book, spine, booklines]
     )
-    wood = (f'<path d="M 447 632 L 577 632 L 512 784 Z" fill="{cream}"/>')
-    wood_shade = (f'<path d="M 512 632 L 577 632 L 512 784 Z" '
-                  f'fill="{gold}" opacity="0.55"/>')
-    lead = f'<path d="M 483 700 L 541 700 L 512 784 Z" fill="{gold_d}"/>'
-
-    if mono:
-        facets = wood_shade = ""
-        lead = f'<path d="M 483 700 L 541 700 L 512 784 Z" fill="#FFFFFF"/>'
-    return "\n".join(
-        [waves, eraser, ferrule, body, facets, wood, wood_shade, lead]
-    )
+    return f'<g transform="translate(0,{OY})">{inner}</g>'
 
 
 def bg_only(radius=0):
     return ('<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">'
-            '<stop offset="0" stop-color="#12A594"/>'
-            '<stop offset="0.55" stop-color="#0C8074"/>'
-            '<stop offset="1" stop-color="#075E55"/></linearGradient></defs>'
+            '<stop offset="0" stop-color="#BFEEE1"/>'
+            '<stop offset="0.5" stop-color="#8FE0CE"/>'
+            '<stop offset="1" stop-color="#63CBB4"/></linearGradient></defs>'
             f'<rect x="0" y="0" width="1024" height="1024" rx="{radius}" '
             'fill="url(#bg)"/>')
 

@@ -2,11 +2,12 @@
 
 ![Kajian Notes icon](app_icon_preview.png)
 
-**Concept.** A **pencil** flanked by **soundwaves** on the app's **teal
-gradient** — listening on both sides, writing in the middle, which is exactly
-what the app does: capture kajian audio and turn it into notes. The gold and
-cream on deep teal palette echoes traditional Islamic art while staying clean
-and modern at small sizes.
+**Concept.** A **microphone whose grille is an open book** (Qur'an / kitab),
+enclosed by a **mosque onion-arch** and topped with a **crescent and star**, on
+the app's soft **mint-teal gradient**. One mark ties together the three things
+the app is about: recording audio (mic), studying kajian (open book), and its
+Islamic identity (arch + crescent). Clean white line-art keeps it legible at
+small sizes.
 
 ## Files (`assets/icon/`)
 
@@ -48,10 +49,12 @@ adaptive `ic_launcher.xml`, the monochrome themed layer, and the web favicons.
 
 Open `tools/generate_icon.py`:
 
-- **Palette** — `CREAM`, `GOLD`, `GOLD_D`, `TEALG` and the `bg_only()` gradient
-  stops control all colors.
-- **Pencil** — the `eraser`, `ferrule`, `body`, `facets`, `wood`, and `lead`
-  shapes in `glyph()`.
-- **Soundwaves** — radii/width/opacity in the `waves` loop.
+- **Palette** — `WHITE`, `BOOKLINE`, `STROKE_W` and the `bg_only()` gradient
+  stops control all colors and line weight.
+- **Crescent + star** — the `crescent` path and `star()` helper in `glyph()`.
+- **Arch** — the `arch` path (onion curve) and `finial` knob.
+- **Mic body** — the `arms`, `stem`, and `base` strokes.
+- **Open book** — the `book` pages, `spine`, and `booklines` in `glyph()`.
+- **Vertical position** — `OY` shifts the whole motif up/down.
 
 Re-run the two commands above to apply changes.
