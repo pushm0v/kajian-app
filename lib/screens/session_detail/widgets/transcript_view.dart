@@ -14,10 +14,10 @@ class TranscriptView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     if (session.status == SessionStatus.transcribing) {
-      return Center(
+      return const Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: const [
+          children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
             Text('Transcribing audio…'),

@@ -33,7 +33,7 @@ class _WaveformBarState extends State<WaveformBar> {
         : Theme.of(context).colorScheme.outlineVariant;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final gap = 3.0;
+        const gap = 3.0;
         final barW =
             (constraints.maxWidth - gap * (_barCount - 1)) / _barCount;
         return Row(

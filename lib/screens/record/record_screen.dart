@@ -56,13 +56,12 @@ class _RecordViewState extends State<_RecordView> {
     return PopScope(
       canPop: !controller.isActive,
       onPopInvokedWithResult: (didPop, _) async {
-        if (!didPop && controller.isActive) {
-          final leave = await _confirmDiscard();
-          if (leave == true && mounted) {
-            await controller.cancel();
-            if (mounted) Navigator.of(context).pop();
-          }
-        }
+        if (didPop || !controller.isActive) return;
+        final navigator = Navigator.of(context);
+        final leave = await _confirmDiscard();
+        if (leave != true) return;
+        await controller.cancel();
+        navigator.pop();
       },
       child: Scaffold(
         appBar: AppBar(title: const Text('Record Kajian')),
