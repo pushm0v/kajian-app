@@ -1,5 +1,9 @@
 # Kajian Notes 🎙️📖
 
+<p align="center">
+  <img src="docs/app_icon_preview.png" width="128" alt="Kajian Notes app icon" />
+</p>
+
 A cross-platform (iOS + Android) Flutter app that **records kajian audio**,
 **transcribes it**, and **generates structured study notes automatically**.
 
@@ -70,7 +74,10 @@ flutter pub get
 # 3. Apply microphone/speech permissions
 #    -> follow docs/PLATFORM_SETUP.md
 
-# 4. Run (mock mode — no backend needed)
+# 4. Generate the app launcher icons (see docs/ICONS.md)
+dart run flutter_launcher_icons
+
+# 5. Run (mock mode — no backend needed)
 flutter run
 ```
 
