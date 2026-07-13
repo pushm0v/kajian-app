@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Generate the Kajian Notes app icon set from a single vector definition.
 
-Concept: a microphone crowned with a mosque onion-dome and a crescent finial,
-with soundwaves radiating outward — fusing the Islamic/kajian tone with the
-app's audio-notes purpose, on the app's teal gradient.
+Concept: a pencil flanked by soundwaves — listening on both sides, writing in
+the middle — on the app's teal gradient with gold/cream accents echoing
+traditional Islamic art.
 
 Outputs (into ../assets/icon):
   app_icon.svg              master vector (rounded, with background)
@@ -32,9 +32,8 @@ GOLD_D = "#D8A94E"
 TEALG = "#0E6E63"
 
 
-def sound_arc(r, side, spread=48):
+def sound_arc(r, side, spread=42, cy=512):
     a0, a1 = math.radians(-spread), math.radians(spread)
-    cy = 500
     if side == "R":
         x0, y0 = CX + r * math.cos(a0), cy + r * math.sin(a0)
         x1, y1 = CX + r * math.cos(a1), cy + r * math.sin(a1)
@@ -50,41 +49,34 @@ def glyph(mono=False):
     gold = gold or GOLD
     gold_d = gold_d or GOLD_D
 
+    # Soundwaves flanking the pencil — the audio/listening half of the app.
     waves = "\n".join(
         f'<path d="{sound_arc(r, s)}" fill="none" stroke="{gold}" '
         f'stroke-width="{w}" stroke-linecap="round" opacity="{op}"/>'
-        for r, w, op in [(200, 20, 0.85), (250, 16, 0.5)]
+        for r, w, op in [(215, 20, 0.85), (268, 16, 0.5)]
         for s in ("L", "R")
     )
 
-    dome = (f'<path d="M 418 432 C 398 414 380 396 396 356 '
-            f'C 412 314 502 296 512 278 C 522 296 612 314 628 356 '
-            f'C 644 396 626 414 606 432 Z" fill="{gold}"/>')
-    dome_shade = (f'<path d="M 512 278 C 522 296 612 314 628 356 '
-                  f'C 644 396 626 414 606 432 L 512 432 Z" '
-                  f'fill="{gold_d}" opacity="0.32"/>')
-    neck = f'<rect x="505" y="262" width="14" height="24" rx="6" fill="{gold_d}"/>'
-    crescent = (f'<path d="M 512 206 A 32 32 0 1 0 542 246 '
-                f'A 25 25 0 1 1 512 206 Z" fill="{gold}"/>')
-
-    capsule = f'<rect x="417" y="420" width="190" height="224" rx="95" fill="{cream}"/>'
-    grille = "\n".join(
-        f'<line x1="454" y1="{y}" x2="570" y2="{y}" stroke="{TEALG}" '
-        f'stroke-width="13" stroke-linecap="round" opacity="0.85"/>'
-        for y in (474, 512, 550)
+    # Pencil pointing down — the note-taking half of the app.
+    eraser = (f'<rect x="447" y="240" width="130" height="76" rx="26" '
+              f'fill="{gold}"/>')
+    ferrule = f'<rect x="447" y="310" width="130" height="32" fill="{gold_d}"/>'
+    body = f'<rect x="447" y="342" width="130" height="290" fill="{cream}"/>'
+    facets = "\n".join(
+        f'<line x1="{x}" y1="358" x2="{x}" y2="618" stroke="{TEALG}" '
+        f'stroke-width="8" stroke-linecap="round" opacity="0.35"/>'
+        for x in (490, 534)
     )
-    bracket = (f'<path d="M 360 540 A 152 152 0 0 0 664 540" fill="none" '
-               f'stroke="{cream}" stroke-width="26" stroke-linecap="round"/>')
-    stem = (f'<line x1="512" y1="690" x2="512" y2="812" stroke="{cream}" '
-            f'stroke-width="26" stroke-linecap="round"/>')
-    base = (f'<line x1="440" y1="820" x2="584" y2="820" stroke="{cream}" '
-            f'stroke-width="26" stroke-linecap="round"/>')
+    wood = (f'<path d="M 447 632 L 577 632 L 512 784 Z" fill="{cream}"/>')
+    wood_shade = (f'<path d="M 512 632 L 577 632 L 512 784 Z" '
+                  f'fill="{gold}" opacity="0.55"/>')
+    lead = f'<path d="M 483 700 L 541 700 L 512 784 Z" fill="{gold_d}"/>'
 
     if mono:
-        grille = dome_shade = ""
+        facets = wood_shade = ""
+        lead = f'<path d="M 483 700 L 541 700 L 512 784 Z" fill="#FFFFFF"/>'
     return "\n".join(
-        [waves, bracket, stem, base, capsule, grille, dome, dome_shade,
-         neck, crescent]
+        [waves, eraser, ferrule, body, facets, wood, wood_shade, lead]
     )
 
 

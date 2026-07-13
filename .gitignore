@@ -48,3 +48,6 @@ Thumbs.db
 # Claude Code
 .claude/worktrees/
 .claude/settings.local.json
+
+# Python (icon generator)
+__pycache__/

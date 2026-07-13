@@ -2,11 +2,11 @@
 
 ![Kajian Notes icon](app_icon_preview.png)
 
-**Concept.** A microphone crowned with a **mosque onion-dome and crescent
-finial**, with **soundwaves** radiating outward, on the app's **teal gradient**.
-It fuses the Islamic / kajian tone with the app's purpose — capturing audio and
-turning it into notes. Gold on teal echoes traditional Islamic art while staying
-clean and modern at small sizes.
+**Concept.** A **pencil** flanked by **soundwaves** on the app's **teal
+gradient** — listening on both sides, writing in the middle, which is exactly
+what the app does: capture kajian audio and turn it into notes. The gold and
+cream on deep teal palette echoes traditional Islamic art while staying clean
+and modern at small sizes.
 
 ## Files (`assets/icon/`)
 
@@ -50,7 +50,8 @@ Open `tools/generate_icon.py`:
 
 - **Palette** — `CREAM`, `GOLD`, `GOLD_D`, `TEALG` and the `bg_only()` gradient
   stops control all colors.
-- **Dome / crescent** — the `dome`, `neck`, and `crescent` paths in `glyph()`.
+- **Pencil** — the `eraser`, `ferrule`, `body`, `facets`, `wood`, and `lead`
+  shapes in `glyph()`.
 - **Soundwaves** — radii/width/opacity in the `waves` loop.
 
 Re-run the two commands above to apply changes.
