@@ -3,21 +3,31 @@ import 'package:flutter/foundation.dart';
 import '../models/kajian_session.dart';
 import '../services/ai_notes_service.dart';
 import '../services/cloud_transcription_service.dart';
+import '../services/on_device_transcription_service.dart';
+import '../services/settings_service.dart';
 import '../services/storage_service.dart';
 
 /// Owns the list of saved kajian sessions and the post-recording processing
-/// pipeline (cloud transcription -> AI notes).
+/// pipeline (transcription -> AI notes). The accurate transcription pass
+/// runs against the cloud Whisper backend or fully on-device (whisper.cpp),
+/// per the user's [TranscriptionMode] setting.
 class SessionProvider extends ChangeNotifier {
   final StorageService _storage;
   final CloudTranscriptionService _cloud;
+  final OnDeviceTranscriptionService _onDevice;
+  final SettingsService _settings;
   final AiNotesService _ai;
 
   SessionProvider({
     StorageService? storage,
     CloudTranscriptionService? cloud,
+    OnDeviceTranscriptionService? onDevice,
+    SettingsService? settings,
     AiNotesService? ai,
   })  : _storage = storage ?? StorageService(),
         _cloud = cloud ?? CloudTranscriptionService(),
+        _onDevice = onDevice ?? OnDeviceTranscriptionService(),
+        _settings = settings ?? SettingsService(),
         _ai = ai ?? AiNotesService();
 
   List<KajianSession> _sessions = [];
@@ -60,20 +70,27 @@ class SessionProvider extends ChangeNotifier {
     await _storage.saveAll(_sessions);
   }
 
-  /// Full post-recording pipeline: refine the transcript with the cloud model,
-  /// then generate structured AI notes. Safe to call again to re-process.
+  /// Full post-recording pipeline: refine the transcript (cloud or
+  /// on-device, per the user's setting), then generate structured AI notes.
+  /// Safe to call again to re-process.
   Future<void> process(String id) async {
     var session = byId(id);
     if (session == null) return;
 
-    // 1) Cloud transcription (if we have audio).
+    // 1) High-accuracy transcription pass (if we have audio).
     if (session.audioFilePath != null) {
       await upsert(session.copyWith(status: SessionStatus.transcribing));
       try {
-        final segments = await _cloud.transcribe(
-          audioFilePath: session.audioFilePath!,
-          localeId: session.localeId,
-        );
+        final mode = await _settings.getTranscriptionMode();
+        final segments = mode == TranscriptionMode.onDevice
+            ? await _onDevice.transcribe(
+                audioFilePath: session.audioFilePath!,
+                localeId: session.localeId,
+              )
+            : await _cloud.transcribe(
+                audioFilePath: session.audioFilePath!,
+                localeId: session.localeId,
+              );
         session = byId(id)!.copyWith(
           transcript: segments,
           status: SessionStatus.transcribed,

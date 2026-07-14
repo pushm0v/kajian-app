@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  TEMPLATE ONLY — this is not a real Firebase config file.
+
+  1. Go to https://console.firebase.google.com and create (or open) your project.
+  2. Add an iOS app with bundle id: app.kajian.id.kajianApp
+  3. In Authentication > Sign-in method, enable the Google and Apple providers.
+  4. Download the generated GoogleService-Info.plist from Project settings > Your apps.
+  5. Save it as ios/Runner/GoogleService-Info.plist (sibling of this file).
+  6. In Xcode, drag the real GoogleService-Info.plist into the Runner target
+     (make sure "Copy items if needed" and the Runner target membership are checked).
+  7. Delete or ignore this .template file — it is not read by the build.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict/>
+</plist>

@@ -6,6 +6,7 @@ import '../../models/kajian_session.dart';
 import '../../providers/session_provider.dart';
 import '../record/record_screen.dart';
 import '../session_detail/session_detail_screen.dart';
+import '../settings/settings_screen.dart';
 import 'widgets/session_card.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -20,6 +21,15 @@ class HomeScreen extends StatelessWidget {
             .textTheme
             .headlineSmall
             ?.copyWith(fontWeight: FontWeight.bold),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _startRecording(context),
