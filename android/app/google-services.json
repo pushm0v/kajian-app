@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "106021924289",
+    "project_id": "aplikasi-raya",
+    "storage_bucket": "aplikasi-raya.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:106021924289:android:d5410f66e2930a7d9f1340",
+        "android_client_info": {
+          "package_name": "app.kajian.id.kajian_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "106021924289-00ufatg0jnera1ur2n344tfaus3inmu9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC9R3Y_k_oVRRcT6XAKBAqK1735Ac5C6uw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "106021924289-00ufatg0jnera1ur2n344tfaus3inmu9.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "106021924289-cu1g192uvhgr1nkdrt257oa78prc8a30.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "app.kajian.id.kajianApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

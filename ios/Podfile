@@ -1,5 +1,6 @@
-# Uncomment this line to define a global platform for your project
-# platform :ios, '13.0'
+# whisper_ggml requires iOS 15.6+; firebase_auth/google_sign_in/sign_in_with_apple
+# are all satisfied well below that, so this is the effective floor.
+platform :ios, '15.6'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -39,5 +40,37 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+
+    # sign_in_with_apple ships a stale VALID_ARCHS[sdk=iphonesimulator*] =
+    # x86_64 left over from Intel-only simulator support. On Apple Silicon
+    # Macs this excludes the arm64 simulator entirely, which makes Xcode
+    # report "no matching destination" for any arm64 simulator (e.g. iPhone
+    # 17 Pro on iOS 26). Strip it so the target falls back to building for
+    # whatever arch the simulator needs.
+    #
+    # NOTE: ffmpeg_kit_flutter_new_min (a whisper_ggml dependency) has a
+    # *real*, separate constraint: its vendored FFmpeg .frameworks only ship
+    # x86_64 simulator slices (no arm64-simulator build exists upstream), so
+    # it legitimately excludes arm64 for iphonesimulator. Do not strip that
+    # one — on Apple Silicon you must run the simulator under Rosetta
+    # (`arch -x86_64` / Simulator's "Open using Rosetta" per-device setting)
+    # for whisper_ggml/on-device transcription to work in Debug builds.
+    next unless target.name == 'sign_in_with_apple'
+    target.build_configurations.each do |config|
+      config.build_settings.delete('VALID_ARCHS[sdk=iphonesimulator*]')
+      config.build_settings.delete('VALID_ARCHS')
+    end
+  end
+
+  installer.pod_targets.select { |t| t.name == 'sign_in_with_apple' }.each do |pod_target|
+    [
+      installer.sandbox.target_support_files_dir(pod_target.name) + "#{pod_target.name}.debug.xcconfig",
+      installer.sandbox.target_support_files_dir(pod_target.name) + "#{pod_target.name}.release.xcconfig",
+      installer.sandbox.target_support_files_dir(pod_target.name) + "#{pod_target.name}.profile.xcconfig",
+    ].each do |path|
+      next unless File.exist?(path)
+      lines = File.readlines(path).reject { |l| l.start_with?('VALID_ARCHS') }
+      File.write(path, lines.join)
+    end
   end
 end
