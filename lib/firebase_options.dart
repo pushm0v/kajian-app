@@ -1,15 +1,6 @@
-// TODO(setup): This file is a placeholder. Generate the real one with the
-// FlutterFire CLI once your Firebase project exists:
-//
-//   dart pub global activate flutterfire_cli
-//   flutterfire configure
-//
-// That command overwrites this file with real `FirebaseOptions` for each
-// platform (reading the same Firebase project you registered the Android
-// package `app.kajian.id.kajian_app` and iOS bundle id `app.kajian.id.kajianApp`
-// under) and updates android/app/google-services.json +
-// ios/Runner/GoogleService-Info.plist for you automatically — you can then
-// delete the .template files next to those two.
+// Generated from android/app/google-services.json and
+// ios/Runner/GoogleService-Info.plist for the "aplikasi-raya" Firebase
+// project. Re-run `flutterfire configure` if those files ever change.
 //
 // ignore_for_file: type=lint
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
@@ -36,19 +27,20 @@ class DefaultFirebaseOptions {
     }
   }
 
-  // Placeholder values — replace by running `flutterfire configure`.
   static const android = FirebaseOptions(
-    apiKey: 'REPLACE_ME',
-    appId: 'REPLACE_ME',
-    messagingSenderId: 'REPLACE_ME',
-    projectId: 'REPLACE_ME',
+    apiKey: 'AIzaSyC9R3Y_k_oVRRcT6XAKBAqK1735Ac5C6uw',
+    appId: '1:106021924289:android:d5410f66e2930a7d9f1340',
+    messagingSenderId: '106021924289',
+    projectId: 'aplikasi-raya',
+    storageBucket: 'aplikasi-raya.firebasestorage.app',
   );
 
   static const ios = FirebaseOptions(
-    apiKey: 'REPLACE_ME',
-    appId: 'REPLACE_ME',
-    messagingSenderId: 'REPLACE_ME',
-    projectId: 'REPLACE_ME',
+    apiKey: 'AIzaSyCsrYLDrG8niQBbK6xvnBV59ZfnYtY-irM',
+    appId: '1:106021924289:ios:b05377f3320601129f1340',
+    messagingSenderId: '106021924289',
+    projectId: 'aplikasi-raya',
+    storageBucket: 'aplikasi-raya.firebasestorage.app',
     iosBundleId: 'app.kajian.id.kajianApp',
   );
 }

@@ -45,11 +45,7 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<!--
-	  Google Sign-In URL scheme. TODO: once you add the real
-	  GoogleService-Info.plist (see the .template file next to this one),
-	  copy its REVERSED_CLIENT_ID value into the string below.
-	-->
+	<!-- Google Sign-In URL scheme, from ios/Runner/GoogleService-Info.plist's REVERSED_CLIENT_ID. -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -57,7 +53,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>REPLACE_WITH_REVERSED_CLIENT_ID</string>
+				<string>com.googleusercontent.apps.106021924289-cu1g192uvhgr1nkdrt257oa78prc8a30</string>
 			</array>
 		</dict>
 	</array>
