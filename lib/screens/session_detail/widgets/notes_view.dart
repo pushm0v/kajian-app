@@ -25,13 +25,12 @@ class NotesView extends StatelessWidget {
     }
     final theme = Theme.of(context);
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
       children: [
-        _Section(
-          title: 'Summary',
-          icon: Icons.summarize,
-          child: Text(note.summary, style: theme.textTheme.bodyLarge),
-        ),
+        if (note.summary.isNotEmpty) ...[
+          _SummaryCard(text: note.summary),
+          const SizedBox(height: 24),
+        ],
         if (note.topics.isNotEmpty)
           _Section(
             title: 'Topics',
@@ -99,8 +98,8 @@ class NotesView extends StatelessWidget {
           children: [
             Icon(Icons.auto_awesome,
                 size: 56, color: theme.colorScheme.primary),
-            const SizedBox(height: 12),
-            Text('No notes yet', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 16),
+            Text('No notes yet', style: theme.textTheme.headlineSmall),
             const SizedBox(height: 8),
             Text(
               'Generate AI notes from the transcript: a summary, key points, and Quran/Hadith references.',
@@ -121,6 +120,54 @@ class NotesView extends StatelessWidget {
   }
 }
 
+/// Highlighted teal-tinted card for the AI summary — the hero of the notes.
+class _SummaryCard extends StatelessWidget {
+  final String text;
+  const _SummaryCard({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_awesome, size: 16, color: scheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'SUMMARY',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            text,
+            style: theme.textTheme.titleMedium?.copyWith(
+              height: 1.45,
+              fontWeight: FontWeight.w400,
+              color: scheme.onSurface,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Section extends StatelessWidget {
   final String title;
   final IconData icon;
@@ -134,21 +181,36 @@ class _Section extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 18, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
-              Text(title,
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w600)),
+              Container(
+                width: 30,
+                height: 30,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(icon, size: 17, color: scheme.primary),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontFamily: 'PlayfairDisplay',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 19,
+                ).copyWith(color: scheme.onSurface),
+              ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           child,
         ],
       ),
@@ -200,19 +262,30 @@ class _ReferenceTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isQuran = reference.type == 'quran';
+    final scheme = theme.colorScheme;
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(isQuran ? Icons.menu_book : Icons.format_quote,
-              size: 18, color: theme.colorScheme.primary),
-          const SizedBox(width: 10),
+          Container(
+            width: 34,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: scheme.primaryContainer.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(isQuran ? Icons.menu_book : Icons.format_quote,
+                size: 18, color: scheme.primary),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

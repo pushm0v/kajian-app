@@ -98,12 +98,37 @@ class _RecordViewState extends State<_RecordView> {
     }
     if (c.segments.isEmpty && c.interimText.isEmpty) {
       return Center(
-        child: Text(
-          c.state == RecordingState.idle
-              ? 'Press record to begin. Live captions appear here.'
-              : 'Listening…',
-          style: theme.textTheme.bodyLarge
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                c.state == RecordingState.idle
+                    ? Icons.graphic_eq_rounded
+                    : Icons.hearing_rounded,
+                size: 40,
+                color: theme.colorScheme.primary.withValues(alpha: 0.7),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                c.state == RecordingState.idle
+                    ? 'Ready when you are'
+                    : 'Listening…',
+                style: theme.textTheme.headlineSmall,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                c.state == RecordingState.idle
+                    ? 'Live captions will appear here as the\nkajian is spoken.'
+                    : 'Keep the mic near the speaker.',
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -129,20 +154,47 @@ class _RecordViewState extends State<_RecordView> {
   }
 
   Widget _timerAndWave(RecordingController c, ThemeData theme) {
+    final recording = c.state == RecordingState.recording;
+    final paused = c.state == RecordingState.paused;
+    final (Color dot, String label) = recording
+        ? (const Color(0xFFE5484D), 'Recording')
+        : paused
+            ? (const Color(0xFFFFB020), 'Paused')
+            : (theme.colorScheme.onSurfaceVariant, 'Ready');
     return Column(
       children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label.toUpperCase(),
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                letterSpacing: 1.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
         Text(
           Formatters.duration(c.elapsed),
           style: TextStyle(
             fontFamily: 'Roboto', // sans, not the serif display face
-            fontSize: 46,
+            fontSize: 52,
             fontWeight: FontWeight.w300,
             letterSpacing: 1,
             color: theme.colorScheme.onSurface,
             fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         SizedBox(
           height: 48,
           child: WaveformBar(
@@ -155,62 +207,49 @@ class _RecordViewState extends State<_RecordView> {
   }
 
   Widget _controls(RecordingController c) {
+    final scheme = Theme.of(context).colorScheme;
     switch (c.state) {
       case RecordingState.idle:
-        return _bigButton(
+        return _CircleControl(
           icon: Icons.mic,
           label: 'Record',
-          color: Theme.of(context).colorScheme.primary,
+          background: scheme.primary,
+          foreground: Colors.white,
+          size: 84,
           onTap: _ready ? () => c.start(localeId: _localeId) : null,
         );
       case RecordingState.finishing:
-        return const CircularProgressIndicator();
+        return const Padding(
+          padding: EdgeInsets.all(24),
+          child: CircularProgressIndicator(),
+        );
       case RecordingState.recording:
       case RecordingState.paused:
         final paused = c.state == RecordingState.paused;
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _circleButton(
+            _CircleControl(
               icon: paused ? Icons.play_arrow : Icons.pause,
+              label: paused ? 'Resume' : 'Pause',
+              background: scheme.surfaceContainerHigh,
+              foreground: scheme.onSurface,
+              size: 66,
               onTap: () => paused ? c.resume() : c.pause(),
             ),
-            const SizedBox(width: 32),
-            _bigButton(
-              icon: Icons.stop,
+            const SizedBox(width: 44),
+            _CircleControl(
+              icon: Icons.stop_rounded,
               label: 'Finish',
-              color: Theme.of(context).colorScheme.error,
+              background: const Color(0xFFE5484D),
+              foreground: Colors.white,
+              size: 84,
               onTap: _finish,
             ),
           ],
         );
     }
-  }
-
-  Widget _bigButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    VoidCallback? onTap,
-  }) {
-    return FilledButton.icon(
-      onPressed: onTap,
-      icon: Icon(icon),
-      label: Text(label),
-      style: FilledButton.styleFrom(
-        backgroundColor: color,
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-      ),
-    );
-  }
-
-  Widget _circleButton({required IconData icon, required VoidCallback onTap}) {
-    return IconButton.filledTonal(
-      onPressed: onTap,
-      iconSize: 28,
-      padding: const EdgeInsets.all(16),
-      icon: Icon(icon),
-    );
   }
 
   Future<void> _finish() async {
@@ -323,26 +362,110 @@ class _LocaleSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Row(
-        children: [
-          const Icon(Icons.language, size: 20),
-          const SizedBox(width: 8),
-          const Text('Language'),
-          const Spacer(),
-          DropdownButton<String>(
-            value: value,
-            underline: const SizedBox.shrink(),
-            onChanged:
-                enabled ? (v) => v == null ? null : onChanged(v) : null,
-            items: [
-              for (final l in AppConstants.supportedLocales)
-                DropdownMenuItem(value: l.id, child: Text(l.label)),
+      child: Align(
+        alignment: Alignment.center,
+        child: Container(
+          padding: const EdgeInsets.only(left: 16, right: 8),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(30),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.language, size: 18, color: scheme.primary),
+              const SizedBox(width: 8),
+              DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: value,
+                  isDense: true,
+                  borderRadius: BorderRadius.circular(16),
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: scheme.onSurface, fontWeight: FontWeight.w600),
+                  onChanged: enabled
+                      ? (v) => v == null ? null : onChanged(v)
+                      : null,
+                  items: [
+                    for (final l in AppConstants.supportedLocales)
+                      DropdownMenuItem(value: l.id, child: Text(l.label)),
+                  ],
+                ),
+              ),
             ],
           ),
-        ],
+        ),
       ),
+    );
+  }
+}
+
+/// A large circular control (record / pause / finish) with a caption below.
+class _CircleControl extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color background;
+  final Color foreground;
+  final double size;
+  final VoidCallback? onTap;
+
+  const _CircleControl({
+    required this.icon,
+    required this.label,
+    required this.background,
+    required this.foreground,
+    required this.size,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final disabled = onTap == null;
+    final bg = disabled ? background.withValues(alpha: 0.4) : background;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: bg,
+            shape: BoxShape.circle,
+            boxShadow: disabled
+                ? null
+                : [
+                    BoxShadow(
+                      color: background.withValues(alpha: 0.35),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            shape: const CircleBorder(),
+            clipBehavior: Clip.antiAlias,
+            child: InkResponse(
+              onTap: onTap,
+              radius: size / 2,
+              child: Icon(icon, size: size * 0.42, color: foreground),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          label,
+          style: theme.textTheme.labelLarge?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: disabled
+                ? theme.colorScheme.onSurfaceVariant
+                : theme.colorScheme.onSurface,
+          ),
+        ),
+      ],
     );
   }
 }

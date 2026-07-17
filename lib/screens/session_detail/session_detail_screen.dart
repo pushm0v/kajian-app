@@ -92,10 +92,23 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                         session.status.isBusy ? null : _regenerate,
                   ),
               ],
-              bottom: const TabBar(
-                tabs: [
-                  Tab(text: 'Notes', icon: Icon(Icons.notes)),
-                  Tab(text: 'Transcript', icon: Icon(Icons.subject)),
+              bottom: TabBar(
+                labelColor: Theme.of(context).colorScheme.primary,
+                unselectedLabelColor:
+                    Theme.of(context).colorScheme.onSurfaceVariant,
+                indicatorColor: Theme.of(context).colorScheme.primary,
+                indicatorSize: TabBarIndicatorSize.label,
+                indicatorWeight: 2.5,
+                labelStyle: const TextStyle(
+                    fontWeight: FontWeight.w700, fontSize: 13.5),
+                unselectedLabelStyle:
+                    const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
+                dividerColor: Theme.of(context).colorScheme.outlineVariant,
+                tabs: const [
+                  Tab(text: 'Notes', icon: Icon(Icons.notes_rounded, size: 20)),
+                  Tab(
+                      text: 'Transcript',
+                      icon: Icon(Icons.subject_rounded, size: 20)),
                 ],
               ),
             ),
@@ -126,25 +139,57 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final subtitle = [session.speaker, session.location]
+        .where((e) => e != null && e!.isNotEmpty)
+        .join(' · ');
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.event, size: 16, color: theme.colorScheme.onSurfaceVariant),
-          const SizedBox(width: 6),
-          Text(Formatters.sessionDate(session.createdAt),
-              style: theme.textTheme.bodySmall),
-          const SizedBox(width: 12),
-          Icon(Icons.schedule,
-              size: 16, color: theme.colorScheme.onSurfaceVariant),
-          const SizedBox(width: 6),
-          Text(Formatters.durationFromMs(session.durationMs),
-              style: theme.textTheme.bodySmall),
-          const Spacer(),
-          StatusChip(status: session.status),
+          Row(
+            children: [
+              _meta(theme, Icons.event_rounded,
+                  Formatters.sessionDate(session.createdAt)),
+              const SizedBox(width: 14),
+              _meta(theme, Icons.schedule_rounded,
+                  Formatters.durationFromMs(session.durationMs)),
+              const Spacer(),
+              StatusChip(status: session.status),
+            ],
+          ),
+          if (subtitle.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.person_outline_rounded,
+                      size: 15, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(subtitle,
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: scheme.onSurfaceVariant),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
+    );
+  }
+
+  Widget _meta(ThemeData theme, IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 15, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 6),
+        Text(text, style: theme.textTheme.bodySmall),
+      ],
     );
   }
 }
