@@ -125,20 +125,29 @@ class _EmptyState extends StatelessWidget {
     final theme = Theme.of(context);
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.fromLTRB(36, 24, 36, 96),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.menu_book_rounded,
-                size: 72, color: theme.colorScheme.primary),
-            const SizedBox(height: 16),
-            Text('No kajian yet',
-                style: theme.textTheme.titleLarge),
-            const SizedBox(height: 8),
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHigh,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.auto_stories_rounded,
+                  size: 46, color: theme.colorScheme.primary),
+            ),
+            const SizedBox(height: 24),
+            Text('Your kajian journal\nstarts here',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.headlineMedium),
+            const SizedBox(height: 12),
             Text(
-              'Tap “Record Kajian” to capture a lecture. We’ll transcribe it and generate notes automatically.',
+              'Tap Record Kajian to capture a lecture. We’ll transcribe it and write up the notes for you.',
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium
+              style: theme.textTheme.bodyLarge
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ],

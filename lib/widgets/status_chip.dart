@@ -34,7 +34,10 @@ class StatusChip extends StatelessWidget {
               height: 10,
               child: CircularProgressIndicator(strokeWidth: 1.5, color: fg),
             ),
-          if (status.isBusy) const SizedBox(width: 6),
+          if (status == SessionStatus.completed)
+            Icon(Icons.check_circle, size: 12, color: fg),
+          if (status.isBusy || status == SessionStatus.completed)
+            const SizedBox(width: 5),
           Text(
             status.label,
             style: TextStyle(

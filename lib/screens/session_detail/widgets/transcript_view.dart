@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/utils/formatters.dart';
 import '../../../models/kajian_session.dart';
+import '../../../widgets/app_toast.dart';
 
 /// Shows the timestamped transcript. Live-captured segments are marked as
 /// "live" until the cloud pass finalizes them.
@@ -99,10 +100,7 @@ class TranscriptView extends StatelessWidget {
                     onPressed: () {
                       Clipboard.setData(
                           ClipboardData(text: session.plainTranscript));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Transcript copied')),
-                      );
+                      AppToast.success(context, 'Transcript copied');
                     },
                     icon: const Icon(Icons.copy),
                     label: const Text('Copy transcript'),

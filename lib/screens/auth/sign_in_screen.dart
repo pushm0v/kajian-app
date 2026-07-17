@@ -15,41 +15,44 @@ class SignInScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final theme = Theme.of(context);
 
     return Scaffold(
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
+          padding: const EdgeInsets.symmetric(horizontal: 28),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.menu_book_rounded,
-                size: 80,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 20),
+              const Spacer(flex: 3),
+              const _Logo(),
+              const SizedBox(height: 28),
               Text(
                 AppConstants.appName,
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineMedium
-                    ?.copyWith(fontWeight: FontWeight.bold),
+                style: theme.textTheme.displaySmall,
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               Text(
-                'Sign in to record, transcribe, and keep your kajian notes.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant),
+                'Record a kajian, transcribe it, and keep\nbeautiful notes — automatically.',
+                style: theme.textTheme.bodyLarge
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 48),
+              const Spacer(flex: 4),
               if (auth.error != null) ...[
-                Text(
-                  auth.error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                  textAlign: TextAlign.center,
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.errorContainer,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(
+                    auth.error!,
+                    style: TextStyle(
+                        color: theme.colorScheme.onErrorContainer),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
                 const SizedBox(height: 16),
               ],
@@ -58,12 +61,52 @@ class SignInScreen extends StatelessWidget {
                 const SizedBox(height: 12),
                 _AppleSignInButton(busy: auth.busy),
               ],
-              if (auth.busy) ...[
-                const SizedBox(height: 24),
-                const CircularProgressIndicator(),
-              ],
+              SizedBox(height: auth.busy ? 20 : 0),
+              if (auth.busy)
+                const SizedBox(
+                  height: 22,
+                  width: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.4),
+                ),
+              const SizedBox(height: 20),
+              Text(
+                'By continuing you agree to our Terms & Privacy Policy.',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Logo extends StatelessWidget {
+  const _Logo();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: Image.asset(
+          'assets/icon/app_icon.png',
+          width: 108,
+          height: 108,
+          fit: BoxFit.cover,
         ),
       ),
     );
@@ -78,13 +121,38 @@ class _GoogleSignInButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      height: 48,
       child: OutlinedButton.icon(
         onPressed: busy
             ? null
             : () => context.read<AuthProvider>().signInWithGoogle(),
-        icon: const Icon(Icons.g_mobiledata, size: 28),
+        icon: const _GoogleGlyph(),
         label: const Text('Continue with Google'),
+      ),
+    );
+  }
+}
+
+/// Simple "G" mark so we don't depend on a bundled Google asset.
+class _GoogleGlyph extends StatelessWidget {
+  const _GoogleGlyph();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 22,
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+      ),
+      child: const Text(
+        'G',
+        style: TextStyle(
+          fontWeight: FontWeight.w700,
+          fontSize: 15,
+          color: Color(0xFF4285F4),
+        ),
       ),
     );
   }
@@ -96,10 +164,15 @@ class _AppleSignInButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return SizedBox(
       width: double.infinity,
-      height: 48,
       child: SignInWithAppleButton(
+        height: 52,
+        style: dark
+            ? SignInWithAppleButtonStyle.white
+            : SignInWithAppleButtonStyle.black,
+        borderRadius: BorderRadius.circular(16),
         onPressed: busy
             ? () {}
             : () => context.read<AuthProvider>().signInWithApple(),

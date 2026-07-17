@@ -133,9 +133,13 @@ class _RecordViewState extends State<_RecordView> {
       children: [
         Text(
           Formatters.duration(c.elapsed),
-          style: theme.textTheme.displaySmall?.copyWith(
-            fontFeatures: const [FontFeature.tabularFigures()],
+          style: TextStyle(
+            fontFamily: 'Roboto', // sans, not the serif display face
+            fontSize: 46,
             fontWeight: FontWeight.w300,
+            letterSpacing: 1,
+            color: theme.colorScheme.onSurface,
+            fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
         const SizedBox(height: 8),

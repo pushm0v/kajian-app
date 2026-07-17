@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/kajian_session.dart';
 import '../../providers/session_provider.dart';
+import '../../widgets/app_toast.dart';
 import '../../widgets/status_chip.dart';
 import 'widgets/notes_view.dart';
 import 'widgets/transcript_view.dart';
@@ -57,9 +58,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
   }
 
   void _showError(Object e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Processing failed: $e')),
-    );
+    AppToast.error(context, 'Processing failed: $e');
   }
 
   @override

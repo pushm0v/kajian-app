@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/on_device_transcription_service.dart';
 import '../../services/settings_service.dart';
+import '../../widgets/app_toast.dart';
 
 /// App settings: transcription mode, on-device model status, and account.
 class SettingsScreen extends StatefulWidget {
@@ -57,11 +58,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       if (!mounted) return;
       setState(() => _modelReady = ready);
+      if (ready) AppToast.success(context, 'On-device model ready');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not download model: $e')),
-      );
+      AppToast.error(context, 'Could not download model: $e');
     } finally {
       if (mounted) setState(() => _downloading = false);
     }
@@ -78,7 +78,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
                 Text('Transcription',
-                    style: Theme.of(context).textTheme.titleMedium),
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineSmall
+                        ?.copyWith(fontSize: 19)),
                 const SizedBox(height: 4),
                 Text(
                   'Choose how the accurate transcript is produced after '
@@ -103,7 +106,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: _onDeviceStatus(),
                 ),
                 const SizedBox(height: 32),
-                Text('Account', style: Theme.of(context).textTheme.titleMedium),
+                Text('Account',
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineSmall
+                        ?.copyWith(fontSize: 19)),
                 const SizedBox(height: 8),
                 const _AccountSection(),
               ],

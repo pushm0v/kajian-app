@@ -61,6 +61,21 @@ dependency_overrides:
 flutter:
   uses-material-design: true
 
+  assets:
+    - assets/icon/app_icon.png
+
+  fonts:
+    - family: PlayfairDisplay
+      fonts:
+        - asset: assets/fonts/PlayfairDisplay-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/PlayfairDisplay-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/PlayfairDisplay-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/PlayfairDisplay-ExtraBold.ttf
+          weight: 800
+
 # App icon generation. Apply to the native projects with
 #   dart run flutter_launcher_icons
 flutter_launcher_icons:
