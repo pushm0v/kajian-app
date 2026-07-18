@@ -15,7 +15,7 @@ class WaveformBar extends StatefulWidget {
 
 class _WaveformBarState extends State<WaveformBar> {
   static const _barCount = 40;
-  final List<double> _levels = List.filled(_barCount, 0.05);
+  final List<double> _levels = List.filled(_barCount, 0.05, growable: true);
 
   @override
   void didUpdateWidget(covariant WaveformBar old) {
