@@ -45,6 +45,10 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Kajian App needs microphone access to record kajian audio.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Kajian App uses on-device speech recognition to show live captions while you record.</string>
 	<!-- Google Sign-In URL scheme, from ios/Runner/GoogleService-Info.plist's REVERSED_CLIENT_ID. -->
 	<key>CFBundleURLTypes</key>
 	<array>
