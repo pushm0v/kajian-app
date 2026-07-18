@@ -31,4 +31,19 @@ class Formatters {
     if (diff < 7) return DateFormat('EEEE').format(dt);
     return DateFormat('d MMM').format(dt);
   }
+
+  /// Coarser bucket than [relativeDay], used to group the homepage kajian
+  /// list into sections: "Today", "Yesterday", "This Week", "This Month",
+  /// or "Earlier".
+  static String dateBucket(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final that = DateTime(dt.year, dt.month, dt.day);
+    final diff = today.difference(that).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    if (diff < 7) return 'This Week';
+    if (diff < 30) return 'This Month';
+    return 'Earlier';
+  }
 }
