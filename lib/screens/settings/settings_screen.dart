@@ -58,10 +58,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       if (!mounted) return;
       setState(() => _modelReady = ready);
-      if (ready) AppToast.success(context, 'On-device model ready');
+      if (ready) AppToast.success(context, 'Model siap digunakan');
     } catch (e) {
       if (!mounted) return;
-      AppToast.error(context, 'Could not download model: $e');
+      AppToast.error(context, 'Gagal mengunduh model: $e');
     } finally {
       if (mounted) setState(() => _downloading = false);
     }
@@ -71,22 +71,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final mode = _mode;
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: const Text('Pengaturan')),
       body: mode == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
-                Text('Transcription',
+                Text('Transkripsi',
                     style: Theme.of(context)
                         .textTheme
                         .headlineSmall
                         ?.copyWith(fontSize: 19)),
                 const SizedBox(height: 4),
                 Text(
-                  'Choose how the accurate transcript is produced after '
-                  'you finish recording. Live captions during recording are '
-                  'unaffected.',
+                  'Pilih bagaimana transkrip akurat dibuat setelah kamu '
+                  'selesai merekam. Teks langsung saat merekam tidak '
+                  'terpengaruh.',
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
@@ -106,7 +106,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: _onDeviceStatus(),
                 ),
                 const SizedBox(height: 32),
-                Text('Account',
+                Text('Akun',
                     style: Theme.of(context)
                         .textTheme
                         .headlineSmall
@@ -132,7 +132,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     return TextButton(
       onPressed: _downloadModel,
-      child: const Text('Download'),
+      child: const Text('Unduh'),
     );
   }
 }
@@ -268,7 +268,7 @@ class _AccountSection extends StatelessWidget {
                       Text(
                         user?.displayName?.isNotEmpty == true
                             ? user!.displayName!
-                            : 'Signed in',
+                            : 'Sudah masuk',
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       if (user?.email != null)
@@ -289,7 +289,7 @@ class _AccountSection extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: () => auth.signOut(),
                 icon: const Icon(Icons.logout),
-                label: const Text('Sign out'),
+                label: const Text('Keluar'),
               ),
             ),
           ],
