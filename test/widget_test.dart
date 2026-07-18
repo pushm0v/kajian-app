@@ -40,7 +40,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Kajian Notes'), findsWidgets);
+    expect(find.text('Kajian App'), findsWidgets);
     expect(find.text('Continue with Google'), findsOneWidget);
   });
 }

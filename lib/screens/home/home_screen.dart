@@ -7,7 +7,10 @@ import '../../providers/session_provider.dart';
 import '../record/record_screen.dart';
 import '../session_detail/session_detail_screen.dart';
 import '../settings/settings_screen.dart';
+import 'widgets/donate_card.dart';
+import 'widgets/greeting_header.dart';
 import 'widgets/session_card.dart';
+import 'widgets/wisdom_card.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -41,23 +44,32 @@ class HomeScreen extends StatelessWidget {
           if (provider.loading) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (provider.sessions.isEmpty) {
-            return const _EmptyState();
-          }
           return RefreshIndicator(
             onRefresh: provider.load,
-            child: ListView.separated(
+            child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-              itemCount: provider.sessions.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, i) {
-                final session = provider.sessions[i];
-                return SessionCard(
-                  session: session,
-                  onTap: () => _openSession(context, session),
-                  onDelete: () => _confirmDelete(context, provider, session),
-                );
-              },
+              children: [
+                const GreetingHeader(),
+                const SizedBox(height: 20),
+                const WisdomCard(),
+                const SizedBox(height: 16),
+                const DonateCard(),
+                const SizedBox(height: 8),
+                if (provider.sessions.isEmpty)
+                  const _EmptyState()
+                else ...[
+                  const SizedBox(height: 20),
+                  for (final session in provider.sessions) ...[
+                    SessionCard(
+                      session: session,
+                      onTap: () => _openSession(context, session),
+                      onDelete: () =>
+                          _confirmDelete(context, provider, session),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ],
+              ],
             ),
           );
         },
@@ -123,35 +135,33 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(36, 24, 36, 96),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 96,
-              height: 96,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHigh,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.auto_stories_rounded,
-                  size: 46, color: theme.colorScheme.primary),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 32, 20, 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHigh,
+              shape: BoxShape.circle,
             ),
-            const SizedBox(height: 24),
-            Text('Your kajian journal\nstarts here',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.headlineMedium),
-            const SizedBox(height: 12),
-            Text(
-              'Tap Record Kajian to capture a lecture. We’ll transcribe it and write up the notes for you.',
+            child: Icon(Icons.auto_stories_rounded,
+                size: 46, color: theme.colorScheme.primary),
+          ),
+          const SizedBox(height: 24),
+          Text('Your kajian journal\nstarts here',
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyLarge
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          ],
-        ),
+              style: theme.textTheme.headlineMedium),
+          const SizedBox(height: 12),
+          Text(
+            'Tap Record Kajian to capture a lecture. We’ll transcribe it and write up the notes for you.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyLarge
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ],
       ),
     );
   }
