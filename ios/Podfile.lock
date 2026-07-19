@@ -11,6 +11,9 @@ PODS:
     - PromisesObjC (~> 2.4)
     - PromisesSwift (~> 2.4)
     - RecaptchaInterop (~> 101.0)
+  - CwlCatchException (2.2.1):
+    - CwlCatchExceptionSupport (~> 2.2.1)
+  - CwlCatchExceptionSupport (2.2.1)
   - ffmpeg_kit_flutter_new_min (8.1.2):
     - ffmpeg_kit_flutter_new_min/min (= 8.1.2)
     - Flutter
@@ -107,10 +110,12 @@ PODS:
     - FlutterMacOS
   - sign_in_with_apple (0.0.1):
     - Flutter
-  - speech_to_text (0.0.1):
+  - speech_to_text (7.2.0):
+    - CwlCatchException
     - Flutter
-    - Try
-  - Try (2.1.1)
+    - FlutterMacOS
+  - url_launcher_ios (0.0.1):
+    - Flutter
   - whisper_ggml (1.0.1):
     - Flutter
 
@@ -125,13 +130,16 @@ DEPENDENCIES:
   - record_ios (from `.symlinks/plugins/record_ios/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
   - sign_in_with_apple (from `.symlinks/plugins/sign_in_with_apple/ios`)
-  - speech_to_text (from `.symlinks/plugins/speech_to_text/ios`)
+  - speech_to_text (from `.symlinks/plugins/speech_to_text/darwin`)
+  - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
   - whisper_ggml (from `.symlinks/plugins/whisper_ggml/ios`)
 
 SPEC REPOS:
   trunk:
     - AppAuth
     - AppCheckCore
+    - CwlCatchException
+    - CwlCatchExceptionSupport
     - Firebase
     - FirebaseAppCheckInterop
     - FirebaseAuth
@@ -146,7 +154,6 @@ SPEC REPOS:
     - PromisesObjC
     - PromisesSwift
     - RecaptchaInterop
-    - Try
 
 EXTERNAL SOURCES:
   ffmpeg_kit_flutter_new_min:
@@ -170,14 +177,18 @@ EXTERNAL SOURCES:
   sign_in_with_apple:
     :path: ".symlinks/plugins/sign_in_with_apple/ios"
   speech_to_text:
-    :path: ".symlinks/plugins/speech_to_text/ios"
+    :path: ".symlinks/plugins/speech_to_text/darwin"
+  url_launcher_ios:
+    :path: ".symlinks/plugins/url_launcher_ios/ios"
   whisper_ggml:
     :path: ".symlinks/plugins/whisper_ggml/ios"
 
 SPEC CHECKSUMS:
   AppAuth: d4f13a8fe0baf391b2108511793e4b479691fb73
   AppCheckCore: e215d35177a9cf469927863e69c13e220df32a8b
-  ffmpeg_kit_flutter_new_min: 3445e604b402d8fbf224b93ca26076d742b3994c
+  CwlCatchException: 7acc161b299a6de7f0a46a6ed741eae2c8b4d75a
+  CwlCatchExceptionSupport: 54ccab8d8c78907b57f99717fb19d4cc3bce02dc
+  ffmpeg_kit_flutter_new_min: 2d44c39c41f0c8e25681e17183f62724f3c4fc22
   Firebase: d99ac19b909cd2c548339c2241ecd0d1599ab02e
   firebase_auth: 50af8366c87bb88c80ebeae62eb60189c7246b9b
   firebase_core: 995454a784ff288be5689b796deb9e9fa3601818
@@ -201,8 +212,8 @@ SPEC CHECKSUMS:
   record_ios: 980fd386a97a35987d0fce3dfda4b26a38c90f4c
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
   sign_in_with_apple: c5dcc141574c8c54d5ac99dd2163c0c72ad22418
-  speech_to_text: ae2abc312e619ff1c53e675a9fc4d785a15c03bb
-  Try: 5ef669ae832617b3cee58cb2c6f99fb767a4ff96
+  speech_to_text: 3b313d98516d3d0406cea424782ec25470c59d19
+  url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
   whisper_ggml: e49d353bd4736293ca18f7a1e90accec56d9b57d
 
 PODFILE CHECKSUM: 22a549f5ddfaee78a4eb0ba4872241734e02fc1c
