@@ -34,7 +34,9 @@ class SettingsService {
     final raw = prefs.getString(_keyTranscriptionMode);
     return TranscriptionMode.values.firstWhere(
       (m) => m.name == raw,
-      orElse: () => TranscriptionMode.cloud,
+      // On-device works with no backend required; cloud mode returns mock
+      // data until a backend is configured, so don't default to it silently.
+      orElse: () => TranscriptionMode.onDevice,
     );
   }
 
