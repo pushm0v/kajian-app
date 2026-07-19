@@ -2,12 +2,13 @@
 class AppConstants {
   const AppConstants._();
 
-  static const String appName = 'Kajian Notes';
+  static const String appName = 'Kajian App';
 
   /// Storage keys.
   static const String sessionsStorageFile = 'kajian_sessions.json';
   static const String prefsOnboardingDone = 'onboarding_done';
   static const String prefsPreferredLocale = 'preferred_locale';
+  static const String prefsWisdomIndex = 'wisdom_index';
 
   /// Supported transcription locales. Kajian is commonly delivered in
   /// Indonesian with embedded Arabic quotations, so both are offered.
@@ -19,6 +20,9 @@ class AppConstants {
   ];
 
   static const String defaultLocaleId = 'id_ID';
+
+  /// Where "Dukung Kajian App" points to.
+  static const String donateUrl = 'https://kawanbantu.com/kajianapp';
 }
 
 class LocaleOption {

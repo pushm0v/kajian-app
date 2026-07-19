@@ -18,7 +18,7 @@ abstract class AuthServiceBase {
 
 /// Wraps Firebase Authentication with Google and Apple sign-in.
 ///
-/// Kajian Notes requires an account so kajian sessions can eventually sync
+/// Kajian App requires an account so kajian sessions can eventually sync
 /// across a user's devices; this service is the only place that talks to
 /// Firebase Auth / the platform sign-in SDKs.
 class AuthService implements AuthServiceBase {

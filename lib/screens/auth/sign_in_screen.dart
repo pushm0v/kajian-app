@@ -7,7 +7,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../../core/constants/app_constants.dart';
 import '../../providers/auth_provider.dart';
 
-/// Shown when there is no signed-in Firebase user. Kajian Notes requires an
+/// Shown when there is no signed-in Firebase user. Kajian App requires an
 /// account (Google or Apple) before recording/browsing sessions.
 class SignInScreen extends StatelessWidget {
   const SignInScreen({super.key});

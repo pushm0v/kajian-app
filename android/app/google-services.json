@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "106021924289-g5hurtdaor0a2n69l9t3sq1bf12prjmo.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "app.kajian.id.kajian_app",
+            "certificate_hash": "ddbd4b1aba2719f91f8919789724354fc3acbd0d"
+          }
+        },
+        {
           "client_id": "106021924289-00ufatg0jnera1ur2n344tfaus3inmu9.apps.googleusercontent.com",
           "client_type": 3
         }

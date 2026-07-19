@@ -12,16 +12,16 @@ enum TranscriptionMode {
 extension TranscriptionModeLabel on TranscriptionMode {
   String get label => switch (this) {
         TranscriptionMode.cloud => 'Cloud (Whisper API)',
-        TranscriptionMode.onDevice => 'On-device (offline)',
+        TranscriptionMode.onDevice => 'Di perangkat (offline)',
       };
 
   String get description => switch (this) {
         TranscriptionMode.cloud =>
-          'Sends the recording to your backend for transcription. Requires '
-              'an internet connection.',
+          'Mengirim rekaman ke server untuk ditranskrip. Membutuhkan '
+              'koneksi internet.',
         TranscriptionMode.onDevice =>
-          'Transcribes fully on this device. Works offline; the first use '
-              'downloads a speech model.',
+          'Transkrip sepenuhnya di perangkat ini. Bisa dipakai offline; '
+              'penggunaan pertama akan mengunduh model suara.',
       };
 }
 

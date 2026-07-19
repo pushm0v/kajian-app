@@ -1,5 +1,5 @@
 name: kajian_app
-description: "Kajian Notes — record kajian audio, transcribe it (live + cloud), and generate AI notes automatically."
+description: "Kajian App — record kajian audio, transcribe it (live + cloud), and generate AI notes automatically."
 publish_to: "none"
 version: 0.1.0+1
 
@@ -19,7 +19,7 @@ dependencies:
   record: ^6.2.1
 
   # On-device / native speech-to-text (live transcription)
-  speech_to_text: ^6.6.2
+  speech_to_text: ^7.0.0
 
   # Runtime permissions (microphone)
   permission_handler: ^11.3.1
@@ -44,6 +44,7 @@ dependencies:
   # Utilities
   intl: ^0.19.0
   uuid: ^4.5.1
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
