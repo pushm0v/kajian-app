@@ -49,5 +49,8 @@ Thumbs.db
 .claude/worktrees/
 .claude/settings.local.json
 
-# Python (icon generator)
+# Python (icon generator, backend)
 __pycache__/
+.venv/
+.pytest_cache/
+backend/.env

@@ -13,6 +13,13 @@ With no `BACKEND_BASE_URL` set, the app runs in **mock mode** — cloud
 transcription and AI notes return realistic sample data so you can build and demo
 the whole flow without any backend.
 
+> **Self-hosted transcription option:** `../backend/` is a ready-to-run
+> `POST /transcribe` implementation using a self-hosted
+> [Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) model (e.g. on
+> a homelab GPU box) instead of a paid Whisper API — see `backend/README.md`.
+> It doesn't implement `/summarize`; pair it with your own summarize backend
+> or leave that endpoint unconfigured.
+
 ## Contract
 
 ### `POST /transcribe`
