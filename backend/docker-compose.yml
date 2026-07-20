@@ -3,8 +3,6 @@ services:
     build: .
     ports:
       - "8080:8080"
-    env_file:
-      - .env
     volumes:
       # Persists downloaded model weights across container restarts.
       - hf-cache:/srv/.cache/huggingface
