@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/config/app_config.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/on_device_transcription_service.dart';
 import '../../services/settings_service.dart';
@@ -21,6 +22,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   TranscriptionMode? _mode;
   bool _modelReady = false;
   bool _downloading = false;
+  bool _cloudLiveCaptionsEnabled = false;
 
   @override
   void initState() {
@@ -33,11 +35,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final ready = await _onDevice.isModelReady(
       OnDeviceTranscriptionService.defaultModel,
     );
+    final cloudLive = await _settings.getCloudLiveCaptionsEnabled();
     if (!mounted) return;
     setState(() {
       _mode = mode;
       _modelReady = ready;
+      _cloudLiveCaptionsEnabled = cloudLive;
     });
+  }
+
+  Future<void> _setCloudLiveCaptionsEnabled(bool enabled) async {
+    setState(() => _cloudLiveCaptionsEnabled = enabled);
+    await _settings.setCloudLiveCaptionsEnabled(enabled);
   }
 
   Future<void> _selectMode(TranscriptionMode mode) async {
@@ -105,6 +114,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onSelect: () => _selectMode(TranscriptionMode.onDevice),
                   trailing: _onDeviceStatus(),
                 ),
+                if (AppConfig.backendBaseUrl.isNotEmpty) ...[
+                  const SizedBox(height: 32),
+                  Text('Rekaman',
+                      style: Theme.of(context)
+                          .textTheme
+                          .headlineSmall
+                          ?.copyWith(fontSize: 19)),
+                  const SizedBox(height: 8),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Teks langsung dari cloud'),
+                    subtitle: const Text(
+                      'Selain teks langsung di perangkat, streaming rekaman '
+                      'ke model cloud untuk teks langsung tambahan saat '
+                      'merekam. Menggunakan lebih banyak kuota data.',
+                    ),
+                    value: _cloudLiveCaptionsEnabled,
+                    onChanged: _setCloudLiveCaptionsEnabled,
+                  ),
+                ],
                 const SizedBox(height: 32),
                 Text('Akun',
                     style: Theme.of(context)

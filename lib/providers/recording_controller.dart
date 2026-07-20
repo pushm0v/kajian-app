@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../core/config/app_config.dart';
 import '../models/kajian_session.dart';
 import '../models/transcript_segment.dart';
 import '../services/audio_recorder_service.dart';
+import '../services/cloud_streaming_transcription_service.dart';
 import '../services/live_transcription_service.dart';
 
 enum RecordingState { idle, recording, paused, finishing }
@@ -17,13 +19,16 @@ enum RecordingState { idle, recording, paused, finishing }
 class RecordingController extends ChangeNotifier {
   final AudioRecorderService _recorder;
   final LiveTranscriptionService _live;
+  final CloudStreamingTranscriptionService _cloudStream;
   final _uuid = const Uuid();
 
   RecordingController({
     AudioRecorderService? recorder,
     LiveTranscriptionService? live,
+    CloudStreamingTranscriptionService? cloudStream,
   })  : _recorder = recorder ?? AudioRecorderService(),
-        _live = live ?? LiveTranscriptionService();
+        _live = live ?? LiveTranscriptionService(),
+        _cloudStream = cloudStream ?? CloudStreamingTranscriptionService();
 
   RecordingState _state = RecordingState.idle;
   RecordingState get state => _state;
@@ -35,20 +40,36 @@ class RecordingController extends ChangeNotifier {
   Duration _elapsed = Duration.zero;
   Timer? _ticker;
 
+  /// Whether this recording should also stream live audio to a self-hosted
+  /// cloud model for captions (backend/app/streaming.py), in addition to
+  /// on-device captions. Set per-recording via [start]; the caller (record
+  /// screen) is responsible for reading the user's setting and only passing
+  /// true when a backend is actually configured
+  /// (AppConfig.cloudStreamingUrl.isNotEmpty).
+  bool _cloudCaptionsRequested = false;
+
   double _amplitude = 0;
   double get amplitude => _amplitude;
   Duration get elapsed => _elapsed;
 
-  /// Finalized live-caption segments captured so far.
+  /// Finalized live-caption segments captured so far (on-device source).
   final List<TranscriptSegment> _segments = [];
 
-  /// The current interim (not-yet-final) caption line.
+  /// The current interim (not-yet-final) caption line — on-device source.
   String _interim = '';
   String get interimText => _interim;
   List<TranscriptSegment> get segments => List.unmodifiable(_segments);
 
+  /// Cumulative cloud-streamed transcript so far, if cloud live captions are
+  /// enabled for this recording. Empty when not requested, not configured,
+  /// or not yet connected.
+  String _cloudInterim = '';
+  String get cloudInterimText => _cloudInterim;
+  bool get isCloudStreamingActive => _cloudCaptionsRequested;
+
   StreamSubscription<double>? _ampSub;
   StreamSubscription<LiveTranscriptResult>? _liveSub;
+  StreamSubscription<CloudStreamResult>? _cloudSub;
 
   bool get isActive =>
       _state == RecordingState.recording || _state == RecordingState.paused;
@@ -60,13 +81,23 @@ class RecordingController extends ChangeNotifier {
     return true;
   }
 
-  Future<void> start({required String localeId}) async {
+  /// [enableCloudLiveCaptions] additionally streams this recording's audio
+  /// to the self-hosted cloud model for live captions. Ignored (treated as
+  /// false) when no backend is configured, since there's nothing to stream
+  /// to.
+  Future<void> start({
+    required String localeId,
+    bool enableCloudLiveCaptions = false,
+  }) async {
     if (_state != RecordingState.idle) return;
     _localeId = localeId;
     _sessionId = _uuid.v4();
     _segments.clear();
     _interim = '';
+    _cloudInterim = '';
     _elapsed = Duration.zero;
+    _cloudCaptionsRequested =
+        enableCloudLiveCaptions && AppConfig.cloudStreamingUrl.isNotEmpty;
 
     _audioPath = await _recorder.start(_sessionId!);
     _startedAt = DateTime.now();
@@ -80,6 +111,18 @@ class RecordingController extends ChangeNotifier {
     if (_live.isAvailable) {
       await _live.start(localeId: localeId);
     }
+
+    if (_cloudCaptionsRequested) {
+      _cloudSub = _cloudStream.results.listen(_onCloudResult);
+      try {
+        await _cloudStream.start(localeId: localeId);
+      } catch (_) {
+        // Best-effort, same philosophy as on-device captions: a failure to
+        // connect shouldn't stop the recording itself.
+        _cloudCaptionsRequested = false;
+      }
+    }
+
     _startTicker();
     notifyListeners();
   }
@@ -98,6 +141,11 @@ class RecordingController extends ChangeNotifier {
     } else {
       _interim = r.text.trim();
     }
+    notifyListeners();
+  }
+
+  void _onCloudResult(CloudStreamResult r) {
+    _cloudInterim = r.text;
     notifyListeners();
   }
 
@@ -131,8 +179,10 @@ class RecordingController extends ChangeNotifier {
     _ticker?.cancel();
     await _live.stop();
     final path = await _recorder.stop();
+    if (_cloudCaptionsRequested) await _cloudStream.finish();
     await _ampSub?.cancel();
     await _liveSub?.cancel();
+    await _cloudSub?.cancel();
 
     final session = KajianSession(
       id: _sessionId ?? _uuid.v4(),
@@ -155,8 +205,10 @@ class RecordingController extends ChangeNotifier {
     _ticker?.cancel();
     await _live.stop();
     await _recorder.stop();
+    if (_cloudCaptionsRequested) await _cloudStream.cancel();
     await _ampSub?.cancel();
     await _liveSub?.cancel();
+    await _cloudSub?.cancel();
     _reset();
     notifyListeners();
   }
@@ -176,7 +228,8 @@ class RecordingController extends ChangeNotifier {
     _startedAt = null;
     _amplitude = 0;
     _interim = '';
-    _segments.clear();
+    _cloudInterim = '';
+    _cloudCaptionsRequested = false;
   }
 
   @override
@@ -184,8 +237,10 @@ class RecordingController extends ChangeNotifier {
     _ticker?.cancel();
     _ampSub?.cancel();
     _liveSub?.cancel();
+    _cloudSub?.cancel();
     _recorder.dispose();
     _live.dispose();
+    _cloudStream.dispose();
     super.dispose();
   }
 }

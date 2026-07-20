@@ -26,6 +26,7 @@ dependencies:
 
   # Networking (cloud transcription + AI notes backend)
   http: ^1.2.2
+  web_socket_channel: ^3.0.1
 
   # On-device / offline high-accuracy transcription (whisper.cpp)
   whisper_ggml: ^2.4.0
