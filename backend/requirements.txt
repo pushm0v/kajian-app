@@ -2,5 +2,7 @@ fastapi>=0.115
 uvicorn[standard]>=0.32
 python-multipart>=0.0.12
 numpy>=1.26
-torch>=2.4
-qwen-asr>=0.1
+# The vllm extra pulls in vLLM (pinned to 0.14.0 by qwen-asr's own
+# pyproject.toml) plus its own compatible torch build — do not also pin a
+# bare `torch` line here, it can conflict with vLLM's required version.
+qwen-asr[vllm]>=0.1

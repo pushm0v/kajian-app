@@ -24,6 +24,14 @@ class AppConfig {
   static const String backendBaseUrl =
       String.fromEnvironment('BACKEND_BASE_URL', defaultValue: '');
 
+  /// Bearer token sent to [backendBaseUrl] (as `Authorization: Bearer ...`
+  /// for HTTP requests, or `?token=...` for the streaming WebSocket, which
+  /// can't carry a bearer header on the handshake). Only needed if your
+  /// backend enforces one (e.g. the reference backend's `ASR_API_TOKEN`);
+  /// leave unset for LAN-only / trusted-network backends.
+  static const String backendAuthToken =
+      String.fromEnvironment('BACKEND_AUTH_TOKEN', defaultValue: '');
+
   /// DEV ONLY. If set, cloud services call the provider directly instead of
   /// the backend proxy. Do not use in production builds.
   static const String devDirectProviderKey =
@@ -41,4 +49,22 @@ class AppConfig {
   /// and AI-notes services return realistic mock data so the UI is testable.
   static bool get isMockMode =>
       backendBaseUrl.isEmpty && devDirectProviderKey.isEmpty;
+
+  /// WebSocket URL for live cloud transcription during recording
+  /// (backend/app/streaming.py's `/transcribe/stream`). Derived from
+  /// [backendBaseUrl] by swapping the http(s) scheme for ws(s) — same host,
+  /// same backend, just the streaming endpoint instead of the batch one.
+  /// Empty when [backendBaseUrl] is empty (mock mode / not configured).
+  static String get cloudStreamingUrl => httpToWsUrl(backendBaseUrl);
+
+  /// Swaps an http(s) URL's scheme for the matching ws(s) one. Pulled out as
+  /// a pure function (rather than inlined in [cloudStreamingUrl]) so it's
+  /// unit-testable without needing to override the compile-time
+  /// [backendBaseUrl] constant.
+  static String httpToWsUrl(String httpUrl) {
+    if (httpUrl.isEmpty) return '';
+    final uri = Uri.parse(httpUrl);
+    final wsScheme = uri.scheme == 'https' ? 'wss' : 'ws';
+    return uri.replace(scheme: wsScheme).toString();
+  }
 }

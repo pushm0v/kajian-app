@@ -22,11 +22,9 @@ def _env_float(name: str, default: float) -> float:
 # Hugging Face model id for the ASR model.
 MODEL_ID = os.environ.get("ASR_MODEL_ID", "Qwen/Qwen3-ASR-1.7B")
 
-# "cuda", "cpu", or "auto" (auto-detect at startup).
-DEVICE = os.environ.get("ASR_DEVICE", "auto")
-
-# Torch dtype for model weights: "bfloat16", "float16", or "float32".
-TORCH_DTYPE = os.environ.get("ASR_TORCH_DTYPE", "bfloat16")
+# Fraction of GPU memory vLLM is allowed to reserve. Both official Qwen3-ASR
+# vLLM examples use 0.8; lower this on a GPU shared with other workloads.
+GPU_MEMORY_UTILIZATION = _env_float("ASR_GPU_MEMORY_UTILIZATION", 0.8)
 
 # Chunk length used for both timestamping and to keep each inference call
 # well under the model's ~20-minute limit. 30s chunks keep memory/latency
@@ -52,3 +50,12 @@ API_TOKEN = os.environ.get("ASR_API_TOKEN", "")
 
 # Directory for scratch files (uploaded audio, converted wav chunks).
 WORK_DIR = os.environ.get("ASR_WORK_DIR", "/tmp/kajian-asr")
+
+# --- Live streaming (/transcribe/stream WebSocket) -------------------------
+#
+# These map directly to qwen_asr's Qwen3ASRModel.init_streaming_state(...)
+# kwargs. See backend/README.md for what each one means; defaults here match
+# the official streaming example in the Qwen3-ASR repo.
+STREAM_CHUNK_SIZE_SEC = _env_float("ASR_STREAM_CHUNK_SIZE_SEC", 2.0)
+STREAM_UNFIXED_CHUNK_NUM = _env_int("ASR_STREAM_UNFIXED_CHUNK_NUM", 2)
+STREAM_UNFIXED_TOKEN_NUM = _env_int("ASR_STREAM_UNFIXED_TOKEN_NUM", 5)

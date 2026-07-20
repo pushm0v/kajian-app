@@ -1,7 +1,16 @@
-# GPU image for a self-hosted Qwen3-ASR-1.7B backend. Requires the NVIDIA
-# Container Toolkit on the host (`docker run --gpus all ...` / the
-# `deploy.resources.reservations.devices` block in docker-compose.yml).
-FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
+# GPU image for a self-hosted Qwen3-ASR-1.7B backend, served via vLLM
+# (required for the live-streaming endpoint — see app/asr_model.py).
+# Requires the NVIDIA Container Toolkit on the host (`docker run --gpus all
+# ...` / the `deploy.resources.reservations.devices` block in
+# docker-compose.yml).
+#
+# NOTE: uses the "devel" (not "runtime") CUDA base because vLLM's install
+# can require nvcc/build tooling for some kernels. If you hit a build error
+# during `pip install qwen-asr[vllm]`, check vLLM's current install docs
+# (https://docs.vllm.ai/en/latest/getting_started/installation/gpu.html)
+# for whether a plain "runtime" base is sufficient for your vLLM version —
+# this wasn't pinned down precisely at the time this Dockerfile was written.
+FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -14,10 +23,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /srv
 
 COPY requirements.txt .
-# torch's default PyPI wheel is CPU-only; install the CUDA 12.4 build first
-# so the later `pip install -r requirements.txt` sees it already satisfied.
+# qwen-asr[vllm] pulls vLLM 0.14.0 (pinned by qwen-asr itself) plus a
+# compatible torch build automatically.
 RUN python3.11 -m pip install --upgrade pip \
-    && python3.11 -m pip install torch --index-url https://download.pytorch.org/whl/cu124 \
     && python3.11 -m pip install -r requirements.txt
 
 COPY app ./app

@@ -34,6 +34,9 @@ class CloudTranscriptionService {
       ..fields['locale'] = localeId
       ..fields['model'] = AppConfig.cloudTranscriptionModel
       ..files.add(await http.MultipartFile.fromPath('audio', audioFilePath));
+    if (AppConfig.backendAuthToken.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer ${AppConfig.backendAuthToken}';
+    }
 
     final streamed = await _client.send(request);
     final response = await http.Response.fromStream(streamed);

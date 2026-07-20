@@ -1,14 +1,22 @@
-"""Loads Qwen3-ASR-1.7B once at startup and exposes a simple transcribe(...)
-call for a single chunk of audio.
+"""Loads Qwen3-ASR-1.7B once at startup via the qwen_asr package's vLLM
+backend, and exposes both a batch transcribe(...) call (for the existing
+/transcribe endpoint) and a streaming session API (for /transcribe/stream).
 
-Uses the official `qwen_asr` package (`pip install qwen-asr`), which wraps
-Hugging Face `transformers` and handles resampling / feature extraction
-internally. See https://huggingface.co/Qwen/Qwen3-ASR-1.7B for model details.
+Consolidated onto vLLM (rather than transformers) because real streaming
+transcription is only available on the vLLM backend — see
+https://github.com/QwenLM/Qwen3-ASR. Running both backends loaded at once
+isn't attempted here; a single 6GB+ GPU comfortably fits one.
 
-Qwen3-ASR outputs plain text only (no timestamps) — this module is
-intentionally single-purpose: text in, text out for one bounded audio clip.
-Chunking a long recording into multiple calls and assigning timestamps from
-chunk boundaries is handled by the caller (see transcription.py).
+API surface used (qwen_asr.Qwen3ASRModel, confirmed against the package
+source — qwen_asr/inference/qwen3_asr.py):
+  - Qwen3ASRModel.LLM(model=..., **vllm_kwargs) -> loads via vllm.LLM(...)
+  - .transcribe(audio=(np.ndarray, sr), language=...) -> batch/offline
+  - .init_streaming_state(unfixed_chunk_num, unfixed_token_num,
+      chunk_size_sec) -> a mutable per-session state object
+  - .streaming_transcribe(pcm16k, state) -> updates state.text in place
+      (cumulative full transcript so far, not a delta)
+  - .finish_streaming_transcribe(state) -> flushes the tail buffer and
+      returns the same state, one last time
 """
 
 from __future__ import annotations
@@ -17,7 +25,6 @@ import logging
 import threading
 
 import numpy as np
-import torch
 
 from . import config
 
@@ -33,59 +40,46 @@ SUPPORTED_LANGUAGES = {
 }
 
 
-def _resolve_device() -> str:
-    if config.DEVICE != "auto":
-        return config.DEVICE
-    return "cuda" if torch.cuda.is_available() else "cpu"
-
-
-def _resolve_dtype(device: str) -> torch.dtype:
-    if device == "cpu":
-        # bf16/fp16 matmul on CPU is either unsupported or very slow on most
-        # hardware; fall back to fp32 regardless of the configured dtype.
-        return torch.float32
-    return {
-        "bfloat16": torch.bfloat16,
-        "float16": torch.float16,
-        "float32": torch.float32,
-    }[config.TORCH_DTYPE]
-
-
 class AsrModel:
-    """Thread-safe wrapper around a single loaded Qwen3-ASR model instance.
+    """Thread-safe wrapper around a single loaded Qwen3-ASR vLLM instance.
 
-    Model inference isn't safely reentrant across threads for a single model
-    object in all backends, so a lock serializes calls. This is fine for a
-    homelab single-GPU box serving one app's worth of traffic.
+    A lock serializes calls into the model. vLLM batches internally, but
+    qwen_asr's Python wrapper isn't documented as safe for concurrent calls
+    from multiple threads on one instance, and a homelab box serving one
+    app's traffic doesn't need that complexity.
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._model = None
-        self.device = _resolve_device()
-        self.dtype = _resolve_dtype(self.device)
 
     def load(self) -> None:
         if self._model is not None:
             return
         logger.info(
-            "Loading %s on device=%s dtype=%s ...",
-            config.MODEL_ID, self.device, self.dtype,
+            "Loading %s via vLLM (gpu_memory_utilization=%.2f) ...",
+            config.MODEL_ID, config.GPU_MEMORY_UTILIZATION,
         )
-        # Imported lazily so `config.py`-only tooling (e.g. tests that don't
-        # need the model) doesn't require qwen_asr/torch to be installed.
-        from qwen_asr import Qwen3ASR  # type: ignore[import-not-found]
+        # Imported lazily so config-only tooling doesn't need qwen_asr/vllm
+        # installed (e.g. this module is imported by tests that mock it out).
+        from qwen_asr import Qwen3ASRModel  # type: ignore[import-not-found]
 
-        self._model = Qwen3ASR(
+        self._model = Qwen3ASRModel.LLM(
             model=config.MODEL_ID,
-            device=self.device,
-            dtype=self.dtype,
+            gpu_memory_utilization=config.GPU_MEMORY_UTILIZATION,
         )
         logger.info("Model loaded.")
 
     @property
     def is_loaded(self) -> bool:
         return self._model is not None
+
+    @property
+    def device(self) -> str:
+        # vLLM always targets CUDA for this model; kept as a property (not a
+        # hardcoded string in main.py) so /health stays a single source of
+        # truth if that ever changes.
+        return "cuda"
 
     def normalize_language(self, locale_id: str | None) -> str | None:
         """Maps a BCP-47 locale (e.g. "id_ID") to the bare language code
@@ -111,12 +105,45 @@ class AsrModel:
             raise RuntimeError("AsrModel.load() must be called before use")
 
         with self._lock:
-            result = self._model.transcribe(
-                (audio, sample_rate),
+            [result] = self._model.transcribe(
+                audio=(audio, sample_rate),
                 language=language,
             )
-        text = getattr(result, "text", None) or getattr(result, "transcript", "")
-        return str(text).strip()
+        return str(result.text).strip()
+
+    def new_streaming_state(self):
+        """Starts a new incremental-decoding session for one live connection.
+
+        Returned state is only safe to use from a single caller at a time —
+        each WebSocket connection gets its own via this method.
+        """
+        if self._model is None:
+            raise RuntimeError("AsrModel.load() must be called before use")
+        with self._lock:
+            return self._model.init_streaming_state(
+                unfixed_chunk_num=config.STREAM_UNFIXED_CHUNK_NUM,
+                unfixed_token_num=config.STREAM_UNFIXED_TOKEN_NUM,
+                chunk_size_sec=config.STREAM_CHUNK_SIZE_SEC,
+            )
+
+    def streaming_transcribe(self, pcm16k: np.ndarray, state) -> str:
+        """Feeds another slice of 16kHz mono audio into `state`.
+
+        Returns the *cumulative* transcript so far (state.text), not just
+        the new text since the last call — the caller is responsible for
+        diffing against what it already sent the client, if needed.
+        """
+        with self._lock:
+            self._model.streaming_transcribe(pcm16k, state)
+        return str(state.text).strip()
+
+    def finish_streaming(self, state) -> str:
+        """Flushes any buffered tail audio and returns the final cumulative
+        transcript for this session. Call once when the client stops
+        streaming (end of recording, or the connection closes)."""
+        with self._lock:
+            self._model.finish_streaming_transcribe(state)
+        return str(state.text).strip()
 
 
 # Module-level singleton, initialized at FastAPI startup (see main.py).

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/formatters.dart';
 import '../../providers/recording_controller.dart';
+import '../../services/settings_service.dart';
 import 'widgets/waveform_bar.dart';
 
 /// Live recording screen. Owns its own [RecordingController] for the session's
@@ -28,8 +30,11 @@ class _RecordView extends StatefulWidget {
 }
 
 class _RecordViewState extends State<_RecordView> {
+  final _settings = SettingsService();
+
   String _localeId = AppConstants.defaultLocaleId;
   bool _ready = false;
+  bool _cloudLiveCaptionsEnabled = false;
   String? _error;
 
   @override
@@ -41,9 +46,12 @@ class _RecordViewState extends State<_RecordView> {
   Future<void> _prepare() async {
     final controller = context.read<RecordingController>();
     final ok = await controller.ensureReady();
+    final cloudLiveCaptionsEnabled =
+        await _settings.getCloudLiveCaptionsEnabled();
     if (!mounted) return;
     setState(() {
       _ready = ok;
+      _cloudLiveCaptionsEnabled = cloudLiveCaptionsEnabled;
       _error = ok ? null : 'Microphone permission is required to record.';
     });
   }
@@ -136,6 +144,30 @@ class _RecordViewState extends State<_RecordView> {
       reverse: true,
       padding: const EdgeInsets.all(16),
       children: [
+        if (c.isCloudStreamingActive && c.cloudInterimText.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.cloud_outlined,
+                        size: 14, color: theme.colorScheme.primary),
+                    const SizedBox(width: 4),
+                    Text('CLOUD',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(c.cloudInterimText, style: theme.textTheme.bodyLarge),
+              ],
+            ),
+          ),
         if (c.interimText.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -216,7 +248,13 @@ class _RecordViewState extends State<_RecordView> {
           background: scheme.primary,
           foreground: Colors.white,
           size: 84,
-          onTap: _ready ? () => c.start(localeId: _localeId) : null,
+          onTap: _ready
+              ? () => c.start(
+                    localeId: _localeId,
+                    enableCloudLiveCaptions: _cloudLiveCaptionsEnabled &&
+                        AppConfig.cloudStreamingUrl.isNotEmpty,
+                  )
+              : null,
         );
       case RecordingState.finishing:
         return const Padding(
