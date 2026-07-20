@@ -49,7 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _startRecording(context),
         icon: const Icon(Icons.mic),
-        label: const Text('Record Kajian'),
+        label: const Text('Record'),
       ),
       body: Consumer<SessionProvider>(
         builder: (context, provider, _) {
