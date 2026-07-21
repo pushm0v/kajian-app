@@ -24,6 +24,8 @@ services:
               count: 1
               capabilities: [gpu]
     restart: unless-stopped
+    volumes:
+      - /dev/shm:/dev/shm
     healthcheck:
       test: ["CMD", "python3.11", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
       interval: 30s
