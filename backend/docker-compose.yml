@@ -9,6 +9,7 @@ services:
     volumes:
       # Persists downloaded model weights across container restarts.
       - hf-cache:/srv/.cache/huggingface
+      - /dev/shm:/dev/shm
     # vLLM's worker processes communicate over shared memory. Docker's
     # default /dev/shm is only 64MB, which is nowhere near enough for a
     # 1.7B model's tensor buffers — without this, the process crashes (often
@@ -24,8 +25,6 @@ services:
               count: 1
               capabilities: [gpu]
     restart: unless-stopped
-    volumes:
-      - /dev/shm:/dev/shm
     healthcheck:
       test: ["CMD", "python3.11", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
       interval: 30s
