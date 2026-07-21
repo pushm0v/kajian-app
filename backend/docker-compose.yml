@@ -2,7 +2,7 @@ services:
   kajian-asr:
     build: .
     ports:
-      - "8080:8080"
+      - "8081:8080"
     volumes:
       # Persists downloaded model weights across container restarts.
       - hf-cache:/srv/.cache/huggingface
