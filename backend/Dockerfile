@@ -37,4 +37,14 @@ EXPOSE 8080
 # restarts don't re-download.
 ENV HF_HOME=/srv/.cache/huggingface
 
-CMD ["python3.11", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Verbose logging while diagnosing startup crashes: vLLM has its own
+# separate logger that's quiet by default, and normal Python exceptions
+# won't show anything useful if the process is dying to a hard
+# segfault/abort instead of a catchable error. Drop these back down (or
+# remove VLLM_LOGGING_LEVEL/CUDA_LAUNCH_BLOCKING) once the backend is
+# confirmed stable — DEBUG-level vLLM logging and CUDA_LAUNCH_BLOCKING
+# both add real overhead.
+ENV VLLM_LOGGING_LEVEL=DEBUG \
+    CUDA_LAUNCH_BLOCKING=1
+
+CMD ["python3.11", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "debug"]
