@@ -165,6 +165,24 @@ the UI shows — the container id changes every restart, so grab it with
   of VRAM. Check `dmesg | grep -i kill` or the host's own resource
   graphs in Dokploy for an OOM kill around the crash time.
 
+**Exit code 132 (SIGILL / illegal instruction) specifically:** if the
+GPU diagnostic confirms the GPU *is* visible with plenty of free VRAM,
+and `nvidia-smi` on the host shows a driver new enough for CUDA 12.8+
+(the driver is backward-compatible with older CUDA runtimes, so a very
+new driver rules out "driver too old" as the cause), the most likely
+remaining cause is a **CPU SIMD instruction mismatch**: PyTorch's
+CPU-side code (still used for tensor setup/preprocessing even on a
+GPU-focused workload) auto-detects AVX-512/AVX2 support and can crash
+with SIGILL if the container/hypervisor's *reported* CPU features
+don't match what's actually usable at runtime. The Dockerfile sets
+`ATEN_CPU_CAPABILITY=default` to force the safest dispatch path as an
+attempted fix for this — if the crash persists even with that set, the
+next thing to check is whether qwen-asr's pinned `torch==2.9.1` /
+`vllm==0.14.0` versions are simply incompatible with something specific
+about the host's CPU or virtualization layer, which may need reporting
+upstream to the `qwen-asr`/`vllm` projects with the exact CPU model and
+`ATEN_CPU_CAPABILITY`/`VLLM_LOGGING_LEVEL=DEBUG` log output attached.
+
 ## Setup (plain Python, no Docker)
 
 ```bash
