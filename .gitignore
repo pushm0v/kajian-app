@@ -54,3 +54,4 @@ __pycache__/
 .venv/
 .pytest_cache/
 backend/.env
+*.egg-info/

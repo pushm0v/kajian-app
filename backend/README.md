@@ -165,23 +165,41 @@ the UI shows — the container id changes every restart, so grab it with
   of VRAM. Check `dmesg | grep -i kill` or the host's own resource
   graphs in Dokploy for an OOM kill around the crash time.
 
-**Exit code 132 (SIGILL / illegal instruction) specifically:** if the
-GPU diagnostic confirms the GPU *is* visible with plenty of free VRAM,
-and `nvidia-smi` on the host shows a driver new enough for CUDA 12.8+
-(the driver is backward-compatible with older CUDA runtimes, so a very
-new driver rules out "driver too old" as the cause), the most likely
-remaining cause is a **CPU SIMD instruction mismatch**: PyTorch's
-CPU-side code (still used for tensor setup/preprocessing even on a
-GPU-focused workload) auto-detects AVX-512/AVX2 support and can crash
-with SIGILL if the container/hypervisor's *reported* CPU features
-don't match what's actually usable at runtime. The Dockerfile sets
-`ATEN_CPU_CAPABILITY=default` to force the safest dispatch path as an
-attempted fix for this — if the crash persists even with that set, the
-next thing to check is whether qwen-asr's pinned `torch==2.9.1` /
-`vllm==0.14.0` versions are simply incompatible with something specific
-about the host's CPU or virtualization layer, which may need reporting
-upstream to the `qwen-asr`/`vllm` projects with the exact CPU model and
-`ATEN_CPU_CAPABILITY`/`VLLM_LOGGING_LEVEL=DEBUG` log output attached.
+**Exit code 132 (SIGILL / illegal instruction) — confirmed root cause and
+fix already applied:** GPU visibility, VRAM, and driver version were all
+ruled out on a real deployment (RTX 3080 Ti, 12.2GB free, driver
+595.71.05/CUDA 13.2). The actual cause was found via `dmesg -T` on the
+Dokploy host, which logged the exact crashing library:
+
+```
+traps: python3.11[...] trap invalid opcode ... in libdynet-*.so
+```
+
+`dmesg` (kernel-level trap logs) is the right tool whenever a crash
+shows no Python traceback at all — Python can't catch a SIGILL, but the
+kernel always logs which binary faulted and at what instruction.
+
+`libdynet` is a dependency of `nagisa` (a Japanese-language tokenizer).
+`qwen_asr`'s own `__init__.py` unconditionally imports
+`qwen3_forced_aligner.py`, which does `import nagisa` at module
+level — even though nagisa is only ever used for Japanese-specific
+tokenization inside `Qwen3ForcedAligner`, a class this backend never
+instantiates (see "Why chunk-based timestamps" above — we don't use
+the forced aligner at all). `dynet`'s own `CMakeLists.txt` hardcodes
+`-march=native` with no override flag, so its PyPI wheel only runs
+correctly on a CPU with the exact instruction set of whatever machine
+built it — a classic "works on the CI builder, SIGILLs everywhere
+else" bug class, unrelated to CUDA/vLLM/PyTorch entirely.
+
+**Fix:** `stubs/nagisa_stub/` is a minimal fake `nagisa` package,
+installed by the Dockerfile *before* `qwen-asr`, so pip's resolver sees
+`nagisa==0.2.11` as already satisfied and never installs the real,
+crashing one. Verified this survives real dependency resolution against
+the full `qwen-asr[vllm]` install (not just `--no-deps`) and that
+`import qwen_asr` succeeds cleanly with the stub in place. If
+`Qwen3ForcedAligner`'s Japanese path is ever actually needed in the
+future, the stub's `tagging()` raises `NotImplementedError` with an
+explanation, rather than crashing the whole process.
 
 ## Setup (plain Python, no Docker)
 
