@@ -111,6 +111,17 @@ curl http://localhost:8080/health
 # {"status":"ok","model":"Qwen/Qwen3-ASR-1.7B","device":"cuda"}
 ```
 
+### Troubleshooting: container restarts in a loop right after "Loading ... via vLLM"
+
+If the logs show the CUDA banner and the "Loading" message repeating
+forever with no Python error in between, vLLM is almost certainly
+crashing on the container's shared-memory limit. vLLM's worker
+processes communicate over `/dev/shm`, and Docker's default there is
+only 64MB — nowhere near enough for a 1.7B model's tensor buffers.
+`docker-compose.yml` sets `shm_size: "8gb"` to fix this; if you're
+running the container directly (not via compose), add `--shm-size=8g`
+to your `docker run` command instead.
+
 ## Setup (plain Python, no Docker)
 
 ```bash
