@@ -1,0 +1,9 @@
+fastapi>=0.115
+uvicorn[standard]>=0.32
+python-multipart>=0.0.12
+# faster-whisper's own requirements.txt pins ctranslate2>=4.0,<5, which
+# targets CUDA 12 + cuDNN 9 — matches the Dockerfile's base image. If you
+# change the base image's CUDA/cuDNN version, check
+# https://github.com/SYSTRAN/faster-whisper#gpu for the compatible
+# ctranslate2 version range first.
+faster-whisper>=1.0
