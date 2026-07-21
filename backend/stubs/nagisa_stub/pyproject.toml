@@ -1,0 +1,9 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nagisa"
+version = "0.2.11"
+description = "Stub replacement for the real nagisa package — see nagisa/__init__.py"
+requires-python = ">=3.9"

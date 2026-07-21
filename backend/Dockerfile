@@ -32,11 +32,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /srv
 
+# Install a stub `nagisa` package BEFORE qwen-asr, so pip's resolver sees
+# nagisa==0.2.11 as already satisfied and never installs the real one.
+#
+# Root cause (confirmed via `dmesg` on the deploy host — kernel logged
+# `trap invalid opcode ... in libdynet-*.so`): qwen_asr's own
+# __init__.py unconditionally imports qwen3_forced_aligner.py, which
+# does `import nagisa` at module level — even though nagisa is only
+# ever used for Japanese-specific tokenization inside a class
+# (Qwen3ForcedAligner) this backend never instantiates. The real
+# nagisa package pulls in a prebuilt dyNET binary that's compiled with
+# `-march=native` (hardcoded in dynet's own CMakeLists.txt, no override
+# flag exists) — so it crashes with SIGILL (exit code 132) on any host
+# whose CPU doesn't match the exact instruction set of PyPI's build
+# machine. See stubs/nagisa_stub/nagisa/__init__.py for the full
+# writeup and what happens if the stub's tagging() is ever actually
+# called (it isn't, on our code paths).
+COPY stubs/nagisa_stub /tmp/nagisa_stub
+RUN python3.11 -m pip install --upgrade pip \
+    && python3.11 -m pip install /tmp/nagisa_stub \
+    && rm -rf /tmp/nagisa_stub
+
 COPY requirements.txt .
 # qwen-asr[vllm] pulls vLLM 0.14.0 (pinned by qwen-asr itself) plus a
-# compatible torch build automatically.
-RUN python3.11 -m pip install --upgrade pip \
-    && python3.11 -m pip install -r requirements.txt
+# compatible torch build automatically. --no-deps on qwen-asr itself
+# isn't used here (we still want its other real dependencies) — only
+# nagisa is being substituted, via the stub installed above.
+RUN python3.11 -m pip install -r requirements.txt
 
 COPY app ./app
 
@@ -55,15 +77,13 @@ ENV HF_HOME=/srv/.cache/huggingface
 # confirmed stable — DEBUG-level vLLM logging and CUDA_LAUNCH_BLOCKING
 # both add real overhead.
 #
-# ATEN_CPU_CAPABILITY=default forces PyTorch's CPU-side ops (which still
-# run for tensor setup/preprocessing even on a GPU-focused workload) to
-# use the most basic, universally-supported instruction dispatch path
-# instead of auto-detecting AVX-512/AVX2. This is a well-documented
-# SIGILL cause when a container/hypervisor's reported CPU features don't
-# actually match what's usable at runtime — the leading hypothesis for
-# this crash (exit code 132 / SIGILL right as vLLM starts loading,
-# with the GPU/driver themselves already confirmed fine). Remove this if
-# it doesn't fix the crash, since it disables faster CPU codepaths.
+# ATEN_CPU_CAPABILITY=default forces PyTorch's CPU-side ops onto the
+# safest, universally-supported instruction dispatch path. This was an
+# earlier attempt at fixing the SIGILL crash below, before `dmesg` on
+# the deploy host pinpointed the actual cause as nagisa/dynet (see the
+# nagisa stub install above) rather than PyTorch itself. Left in place
+# as a harmless extra safety margin — remove if it's ever confirmed
+# unnecessary, since it disables some faster CPU codepaths.
 ENV VLLM_LOGGING_LEVEL=DEBUG \
     CUDA_LAUNCH_BLOCKING=1 \
     ATEN_CPU_CAPABILITY=default
