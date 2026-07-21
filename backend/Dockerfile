@@ -26,8 +26,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
+# python3.11-dev (Python.h) + build-essential (gcc/make) are required by
+# vLLM, which JIT-compiles a CUDA utility file at engine startup — without
+# them it fails with "fatal error: Python.h: No such file or directory"
+# right as the vLLM engine core process starts.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3.11 python3.11-venv python3-pip ffmpeg \
+        python3.11 python3.11-venv python3.11-dev python3-pip ffmpeg build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv
