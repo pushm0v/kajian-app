@@ -201,6 +201,16 @@ the full `qwen-asr[vllm]` install (not just `--no-deps`) and that
 future, the stub's `tagging()` raises `NotImplementedError` with an
 explanation, rather than crashing the whole process.
 
+### Error: `fatal error: Python.h: No such file or directory`
+
+Seen once past the SIGILL crash above, right as the vLLM engine core
+process starts (`EngineCore_DP0`): vLLM JIT-compiles a CUDA utility
+file at startup, which needs Python's C development headers. The base
+image only had the `python3.11`/`python3.11-venv` runtime packages, not
+the `-dev` headers or a C compiler. Fixed by adding `python3.11-dev`
+(provides `Python.h`) and `build-essential` (provides `gcc`/`make`) to
+the Dockerfile's `apt-get install` line.
+
 ## Setup (plain Python, no Docker)
 
 ```bash
