@@ -2,15 +2,25 @@
 # (required for the live-streaming endpoint — see app/asr_model.py).
 # Requires the NVIDIA Container Toolkit on the host (`docker run --gpus all
 # ...` / the `deploy.resources.reservations.devices` block in
-# docker-compose.yml).
+# docker-compose.yml). Confirmed host driver 595.71.05 / CUDA 13.2, which
+# is backward-compatible with CUDA 12.8 userspace libs — so a too-old
+# driver was ruled out as the cause of the SIGILL crash below.
+#
+# CUDA VERSION: pip-installed torch (pulled in by qwen-asr[vllm]==0.14.0,
+# which pins torch==2.9.1) bundles its OWN CUDA 12.8 runtime libraries
+# (nvidia-cuda-runtime-cu12==12.8.90, etc.) regardless of what's baked into
+# this base image — the base image's system CUDA toolkit is really only
+# used at `pip install` time for any packages that invoke nvcc directly.
+# Was previously pinned to 12.4.1; bumped to 12.8.1 to match what
+# torch/vLLM actually run with, for consistency even though the driver
+# check above ruled out this being the crash's root cause. If qwen-asr's
+# pinned vllm/torch versions change later, check
+# https://pypi.org/pypi/torch/<version>/json for the current
+# nvidia-cuda-runtime-cu12 version and match this base image to it.
 #
 # NOTE: uses the "devel" (not "runtime") CUDA base because vLLM's install
-# can require nvcc/build tooling for some kernels. If you hit a build error
-# during `pip install qwen-asr[vllm]`, check vLLM's current install docs
-# (https://docs.vllm.ai/en/latest/getting_started/installation/gpu.html)
-# for whether a plain "runtime" base is sufficient for your vLLM version —
-# this wasn't pinned down precisely at the time this Dockerfile was written.
-FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
+# can require nvcc/build tooling for some kernels.
+FROM nvidia/cuda:12.8.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -44,7 +54,18 @@ ENV HF_HOME=/srv/.cache/huggingface
 # remove VLLM_LOGGING_LEVEL/CUDA_LAUNCH_BLOCKING) once the backend is
 # confirmed stable — DEBUG-level vLLM logging and CUDA_LAUNCH_BLOCKING
 # both add real overhead.
+#
+# ATEN_CPU_CAPABILITY=default forces PyTorch's CPU-side ops (which still
+# run for tensor setup/preprocessing even on a GPU-focused workload) to
+# use the most basic, universally-supported instruction dispatch path
+# instead of auto-detecting AVX-512/AVX2. This is a well-documented
+# SIGILL cause when a container/hypervisor's reported CPU features don't
+# actually match what's usable at runtime — the leading hypothesis for
+# this crash (exit code 132 / SIGILL right as vLLM starts loading,
+# with the GPU/driver themselves already confirmed fine). Remove this if
+# it doesn't fix the crash, since it disables faster CPU codepaths.
 ENV VLLM_LOGGING_LEVEL=DEBUG \
-    CUDA_LAUNCH_BLOCKING=1
+    CUDA_LAUNCH_BLOCKING=1 \
+    ATEN_CPU_CAPABILITY=default
 
 CMD ["python3.11", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "debug"]
