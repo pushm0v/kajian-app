@@ -113,14 +113,57 @@ curl http://localhost:8080/health
 
 ### Troubleshooting: container restarts in a loop right after "Loading ... via vLLM"
 
-If the logs show the CUDA banner and the "Loading" message repeating
-forever with no Python error in between, vLLM is almost certainly
-crashing on the container's shared-memory limit. vLLM's worker
-processes communicate over `/dev/shm`, and Docker's default there is
-only 64MB — nowhere near enough for a 1.7B model's tensor buffers.
-`docker-compose.yml` sets `shm_size: "8gb"` to fix this; if you're
-running the container directly (not via compose), add `--shm-size=8g`
-to your `docker run` command instead.
+This means the process is dying with no Python traceback — either a
+hard crash (segfault/abort from CUDA or vLLM's C++/Rust internals,
+which Python can't catch) or the container being OOM-killed by the
+kernel. `restart: unless-stopped` just respawns it into the same
+crash forever, and normal log verbosity often shows nothing useful in
+between.
+
+**Step 1 — get real logs.** The Dockerfile sets `VLLM_LOGGING_LEVEL=DEBUG`,
+`CUDA_LAUNCH_BLOCKING=1`, and runs uvicorn with `--log-level debug` so
+there's actually something to read. Also added: a GPU diagnostic
+(`asr_model.py`'s `_log_gpu_diagnostics`) that logs CUDA visibility and
+free/total VRAM *before* vLLM touches anything — if the crash still
+shows no error, check whether this diagnostic line even printed. If it
+never appears, the process is dying before reaching Python code that
+imports `torch` at all (e.g. failing during the CUDA runtime's own
+initialization) — a different failure than a Python-catchable one.
+
+Pull the full log history (not just what's currently on screen,
+which a restart-looping container scrolls past fast):
+```bash
+docker compose logs --no-color --tail=1000 kajian-asr > /tmp/kajian-asr.log
+```
+On Dokploy specifically, use its Logs tab in the application view, or
+`docker logs <container-id>` via SSH on the host if you need more than
+the UI shows — the container id changes every restart, so grab it with
+`docker ps -a --filter name=kajian-asr` first.
+
+**Step 2 — common causes to check, in likely order:**
+- **Shared memory too small.** Fixed via `shm_size: "8gb"` in
+  `docker-compose.yml`. Do **not** additionally bind-mount the host's
+  `/dev/shm` (`- /dev/shm:/dev/shm`) — that overrides the tmpfs
+  `shm_size` creates and ties the container to the host's own
+  `/dev/shm` size/permissions instead, which can itself cause a
+  different crash. Pick one mechanism, not both.
+- **GPU not actually visible to the container.** Dokploy doesn't set
+  up the NVIDIA Container Toolkit on the host for you — confirm it's
+  installed and configured (`nvidia-smi` works on the host itself, and
+  the container's `torch.cuda.is_available()` diagnostic line above
+  prints `True`). If it prints `False` or never appears, this is a
+  host/runtime configuration problem, not something fixable from
+  `docker-compose.yml` alone.
+- **Not enough VRAM.** The 1.7B model needs roughly 6GB+ free. Check
+  the diagnostic's logged `free=`/`total=` GPU memory — if another
+  process (or a previous crashed vLLM worker that didn't release
+  memory) is holding VRAM, `gpu_memory_utilization=0.8` may not leave
+  enough room. Try lowering `ASR_GPU_MEMORY_UTILIZATION` (e.g. to
+  `0.6`) or switching `ASR_MODEL_ID` to `Qwen/Qwen3-ASR-0.6B`.
+- **OOM-killed (system RAM, not VRAM).** vLLM's own process + CUDA
+  context + model loading can use several GB of host RAM independent
+  of VRAM. Check `dmesg | grep -i kill` or the host's own resource
+  graphs in Dokploy for an OOM kill around the crash time.
 
 ## Setup (plain Python, no Docker)
 

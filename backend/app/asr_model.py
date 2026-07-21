@@ -56,6 +56,7 @@ class AsrModel:
     def load(self) -> None:
         if self._model is not None:
             return
+        self._log_gpu_diagnostics()
         logger.info(
             "Loading %s via vLLM (gpu_memory_utilization=%.2f) ...",
             config.MODEL_ID, config.GPU_MEMORY_UTILIZATION,
@@ -69,6 +70,28 @@ class AsrModel:
             gpu_memory_utilization=config.GPU_MEMORY_UTILIZATION,
         )
         logger.info("Model loaded.")
+
+    def _log_gpu_diagnostics(self) -> None:
+        """Logs GPU visibility/memory *before* vLLM touches anything.
+
+        vLLM/CUDA failures can crash the whole process with no Python
+        traceback at all (a hard segfault/abort, not a catchable
+        exception) — if that happens, these lines are the only signal
+        we'll have about whether the GPU was even visible going in.
+        """
+        try:
+            import torch  # noqa: PLC0415 - only needed for this diagnostic
+            logger.info("torch.cuda.is_available() = %s", torch.cuda.is_available())
+            if torch.cuda.is_available():
+                for i in range(torch.cuda.device_count()):
+                    props = torch.cuda.get_device_properties(i)
+                    free, total = torch.cuda.mem_get_info(i)
+                    logger.info(
+                        "GPU %d: %s, total=%.1fGB, free=%.1fGB",
+                        i, props.name, total / 1e9, free / 1e9,
+                    )
+        except Exception:  # noqa: BLE001 - diagnostics must never block loading
+            logger.exception("GPU diagnostic check itself failed")
 
     @property
     def is_loaded(self) -> bool:
