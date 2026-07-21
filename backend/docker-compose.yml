@@ -3,6 +3,9 @@ services:
     build: .
     ports:
       - "8081:8080"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
     volumes:
       # Persists downloaded model weights across container restarts.
       - hf-cache:/srv/.cache/huggingface
