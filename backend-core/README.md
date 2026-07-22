@@ -21,6 +21,13 @@ two stay pure, stateless inference containers — this service is where
   key) and persists the generated notes. This replaces the app's own
   `SessionProvider.process()` pipeline, which used to call
   `CloudTranscriptionService`/`AiNotesService` directly from the device.
+- **Live captions**: `WS /transcribe/stream` relays the app's live-recording
+  audio to the Qwen worker (the only one of the two with a streaming
+  story) for low-latency captions during recording, the WebSocket
+  counterpart to the REST proxy above. The app connects only to this
+  endpoint — never to `../backend/`'s own `/transcribe/stream` directly —
+  so the worker's URL/token stay a server-side secret. See
+  `app/routers/streaming.py`.
 - **Admin**: `routers/admin.py` backs a separate Next.js app (`../admin/`)
   — user list, per-user session browsing with audio playback, basic
   usage stats. See `scripts/promote_admin.py` for granting admin access
@@ -134,6 +141,7 @@ of how this fits with the two ASR backends).
 | `GET /sessions/{id}/audio-url` | user | Get a presigned download URL |
 | `POST /sessions/{id}/transcribe` | user | Run the ASR proxy against uploaded audio |
 | `POST /sessions/{id}/summarize` | user | Generate AI notes from the transcript |
+| `WS /transcribe/stream` | user (`?token=`) | Live captions during recording, relayed to the Qwen worker |
 | `GET /admin/stats` | admin | Basic usage stats |
 | `GET /admin/users` | admin | All users + session counts |
 | `GET /admin/users/{id}/sessions` | admin | Any user's sessions |

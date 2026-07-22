@@ -52,8 +52,19 @@ flutter run \
 Each of `QWEN_BASE_URL` / `WHISPER_BASE_URL` falls back to `BACKEND_BASE_URL`
 when unset, so a single-backend setup keeps working (both entries just point at
 the one backend). The picker only offers a model whose URL is configured; the
-chosen model is remembered across sessions. Live cloud captions during
-recording still use the Qwen backend (it's the one with `WS /transcribe/stream`).
+chosen model is remembered across sessions and, once signed in, is what's sent
+to `backend-core`'s `POST /sessions/{id}/transcribe` as `model`.
+
+`QWEN_BASE_URL`/`WHISPER_BASE_URL` only matter directly to the app when sync
+isn't available (offline, or `BACKEND_BASE_URL` unset) — see
+`CloudTranscriptionService`, which then calls the chosen worker straight from
+the device as a fallback (the whole app requires sign-in, but sync itself
+also needs `BACKEND_BASE_URL` set, so this fallback path is real whenever
+that's missing). Live cloud captions during recording always go through
+`backend-core`'s `WS /transcribe/stream` instead (never straight to
+`../backend/`), which relays to the Qwen worker server-side — see
+`../backend-core/README.md`. On-device captions (`speech_to_text`) are
+unaffected either way.
 
 To benchmark the two head-to-head, see `../benchmark/`.
 

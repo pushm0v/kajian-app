@@ -12,3 +12,4 @@ boto3>=1.34
 httpx>=0.27
 anthropic>=0.40
 anyio>=4.0
+websockets>=13.0  # outbound WS client to the Qwen worker, see routers/streaming.py

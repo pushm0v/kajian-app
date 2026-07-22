@@ -41,11 +41,11 @@ class RecordingController extends ChangeNotifier {
   Timer? _ticker;
 
   /// Whether this recording should also stream live audio to a self-hosted
-  /// cloud model for captions (backend/app/streaming.py), in addition to
-  /// on-device captions. Set per-recording via [start]; the caller (record
-  /// screen) is responsible for reading the user's setting and only passing
-  /// true when a backend is actually configured
-  /// (AppConfig.cloudStreamingUrl.isNotEmpty).
+  /// cloud model for captions via backend-core's streaming proxy
+  /// (backend-core/app/routers/streaming.py), in addition to on-device
+  /// captions. Set per-recording via [start]; the caller (record screen) is
+  /// responsible for reading the user's setting and only passing true when
+  /// a backend is actually configured (AppConfig.cloudStreamingUrl.isNotEmpty).
   bool _cloudCaptionsRequested = false;
 
   double _amplitude = 0;

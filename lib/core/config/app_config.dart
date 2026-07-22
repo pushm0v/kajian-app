@@ -24,11 +24,14 @@ class AppConfig {
   static const String backendBaseUrl =
       String.fromEnvironment('BACKEND_BASE_URL', defaultValue: '');
 
-  /// Bearer token sent to [backendBaseUrl] (as `Authorization: Bearer ...`
-  /// for HTTP requests, or `?token=...` for the streaming WebSocket, which
-  /// can't carry a bearer header on the handshake). Only needed if your
-  /// backend enforces one (e.g. the reference backend's `ASR_API_TOKEN`);
-  /// leave unset for LAN-only / trusted-network backends.
+  /// Bearer token sent as `Authorization: Bearer ...` by
+  /// [CloudTranscriptionService]'s direct-to-worker fallback (used when
+  /// sync isn't available — see SessionProvider._transcribeViaServer).
+  /// Only needed if the ASR worker enforces one (e.g. the reference
+  /// backend's `ASR_API_TOKEN`); leave unset for LAN-only / trusted-network
+  /// setups. Not used for backend-core requests (REST or the streaming
+  /// WebSocket) — those carry the signed-in user's live Firebase ID token
+  /// instead (see [CoreApiClient], [CloudStreamingTranscriptionService]).
   static const String backendAuthToken =
       String.fromEnvironment('BACKEND_AUTH_TOKEN', defaultValue: '');
 
@@ -67,11 +70,13 @@ class AppConfig {
   static bool get isMockMode =>
       backendBaseUrl.isEmpty && devDirectProviderKey.isEmpty;
 
-  /// WebSocket URL for live cloud transcription during recording
-  /// (backend/app/streaming.py's `/transcribe/stream`). Derived from
-  /// [backendBaseUrl] by swapping the http(s) scheme for ws(s) — same host,
-  /// same backend, just the streaming endpoint instead of the batch one.
-  /// Empty when [backendBaseUrl] is empty (mock mode / not configured).
+  /// WebSocket URL for live cloud transcription during recording —
+  /// backend-core's `/transcribe/stream` (backend-core/app/routers/
+  /// streaming.py), which relays to the Qwen worker server-side. Derived
+  /// from [backendBaseUrl] (backend-core's URL, not [qwenBaseUrl]) by
+  /// swapping the http(s) scheme for ws(s) — the app talks only to
+  /// backend-core, never to the Qwen worker directly. Empty when
+  /// [backendBaseUrl] is empty (mock mode / not configured).
   static String get cloudStreamingUrl => httpToWsUrl(backendBaseUrl);
 
   /// Swaps an http(s) URL's scheme for the matching ws(s) one. Pulled out as
