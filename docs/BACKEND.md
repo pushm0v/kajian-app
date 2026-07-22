@@ -1,5 +1,16 @@
 # Backend proxy
 
+> **The recommended setup is `../backend-core/`**, not pointing the app
+> directly at `../backend/`/`../backend-whisper/`. backend-core owns users,
+> sessions, transcripts, notes, and audio storage (Postgres + MinIO,
+> Firebase-token auth) and proxies `/transcribe`/`/summarize` to the two
+> ASR workers described below — the app talks to *it*, not to the ASR
+> workers directly. This doc's contract section still describes the wire
+> format `backend-core` implements and forwards to, and is what
+> `backend/`/`backend-whisper/` speak to each other; see
+> `../backend-core/README.md` for the actual recommended deployment and
+> `../admin/README.md` for the admin dashboard it backs.
+
 **Why a backend?** Shipping an Anthropic or OpenAI API key inside the mobile app
 is insecure — anyone can extract it from the app bundle and run up your bill. The
 app is designed to talk to a small backend that holds the secret keys and exposes

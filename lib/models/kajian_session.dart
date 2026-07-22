@@ -36,8 +36,17 @@ class KajianSession {
   final DateTime createdAt;
   final int durationMs;
 
-  /// Local file path to the recorded audio (may be null if discarded).
+  /// Local file path to the recorded audio, if it still exists on this
+  /// device (may be null: discarded locally, or this session's data came
+  /// from the server rather than a recording made on this device).
   final String? audioFilePath;
+
+  /// Whether backend-core has this session's audio stored (independent of
+  /// [audioFilePath] — the two can disagree, e.g. right after a fresh
+  /// install pulls sessions down from the server before any local
+  /// recording file exists). A fresh presigned download URL must be
+  /// requested (CoreApiClient.getAudioDownloadUrl) to actually fetch it.
+  final bool hasServerAudio;
 
   /// BCP-47 / locale id used for transcription, e.g. "id_ID".
   final String localeId;
@@ -54,6 +63,7 @@ class KajianSession {
     required this.createdAt,
     this.durationMs = 0,
     this.audioFilePath,
+    this.hasServerAudio = false,
     required this.localeId,
     this.transcript = const [],
     this.note,
@@ -73,6 +83,7 @@ class KajianSession {
     String? location,
     int? durationMs,
     String? audioFilePath,
+    bool? hasServerAudio,
     String? localeId,
     List<TranscriptSegment>? transcript,
     KajianNote? note,
@@ -86,6 +97,7 @@ class KajianSession {
       createdAt: createdAt,
       durationMs: durationMs ?? this.durationMs,
       audioFilePath: audioFilePath ?? this.audioFilePath,
+      hasServerAudio: hasServerAudio ?? this.hasServerAudio,
       localeId: localeId ?? this.localeId,
       transcript: transcript ?? this.transcript,
       note: note ?? this.note,
@@ -101,6 +113,7 @@ class KajianSession {
         'createdAt': createdAt.toIso8601String(),
         'durationMs': durationMs,
         'audioFilePath': audioFilePath,
+        'hasServerAudio': hasServerAudio,
         'localeId': localeId,
         'transcript': transcript.map((s) => s.toJson()).toList(),
         'note': note?.toJson(),
@@ -118,6 +131,7 @@ class KajianSession {
               DateTime.now(),
       durationMs: (json['durationMs'] as num?)?.toInt() ?? 0,
       audioFilePath: json['audioFilePath'] as String?,
+      hasServerAudio: json['hasServerAudio'] as bool? ?? false,
       localeId: json['localeId'] as String? ?? 'id_ID',
       transcript: (json['transcript'] as List?)
               ?.map((e) =>

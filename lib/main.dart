@@ -16,9 +16,11 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(
-          create: (_) => SessionProvider()..load(),
-        ),
+        // load() is triggered by _AuthGate once the user is confirmed
+        // signed in (see app.dart) — every backend-core request needs a
+        // Firebase ID token, so there's nothing useful to sync before then,
+        // and the sign-in screen never shows session data anyway.
+        ChangeNotifierProvider(create: (_) => SessionProvider()),
       ],
       child: const KajianApp(),
     ),
