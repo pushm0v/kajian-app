@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:record/record.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -11,16 +12,21 @@ import '../core/config/app_config.dart';
 /// [LiveTranscriptResult] from on-device STT, [text] here is always the
 /// *cumulative* transcript for the whole streaming session so far — the
 /// server has no concept of "final" segments mid-stream (see
-/// backend/app/streaming.py's wire protocol) — [isFinal] only turns true
-/// once, right before the connection closes at the end of recording.
+/// backend-core/app/routers/streaming.py's wire protocol, which mirrors
+/// backend/app/streaming.py's — backend-core just relays it) — [isFinal]
+/// only turns true once, right before the connection closes at the end of
+/// recording.
 class CloudStreamResult {
   final String text;
   final bool isFinal;
   const CloudStreamResult(this.text, this.isFinal);
 }
 
-/// Live, low-latency transcription via a self-hosted Qwen3-ASR backend
-/// (see backend/app/streaming.py), as an alternative/supplement to the
+/// Live, low-latency transcription via backend-core's `/transcribe/stream`
+/// (see backend-core/app/routers/streaming.py), which relays audio to a
+/// self-hosted Qwen3-ASR backend server-side — this service never talks to
+/// the Qwen worker directly, only to backend-core, same as the rest of the
+/// app's cloud features. Used as an alternative/supplement to the
 /// on-device [LiveTranscriptionService] during recording.
 ///
 /// Owns its own microphone capture via a dedicated [AudioRecorder] instance
@@ -54,8 +60,17 @@ class CloudStreamingTranscriptionService {
   static const _sampleRate = 16000;
 
   /// Opens the WebSocket, starts a second mic-capture stream (PCM16LE mono
-  /// 16kHz, matching backend/app/streaming.py's expected wire format), and
-  /// begins forwarding captured audio to the server as it arrives.
+  /// 16kHz, matching backend-core/app/routers/streaming.py's expected wire
+  /// format), and begins forwarding captured audio to the server as it
+  /// arrives.
+  ///
+  /// Requires a signed-in Firebase user — backend-core's streaming proxy
+  /// verifies the same ID token as every other request (see
+  /// [CoreApiClient]'s `_authHeader`), just carried as `?token=` instead of
+  /// an `Authorization` header, since a WebSocket handshake can't reliably
+  /// carry custom headers. Throws [StateError] if called while signed out;
+  /// callers are expected to only reach this when sync is enabled (i.e.
+  /// signed in with a backend configured — see SessionProvider.syncEnabled).
   Future<void> start({required String localeId}) async {
     final base = AppConfig.cloudStreamingUrl;
     if (base.isEmpty) {
@@ -64,12 +79,18 @@ class CloudStreamingTranscriptionService {
         'configured (AppConfig.cloudStreamingUrl is empty).',
       );
     }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw StateError(
+        'CloudStreamingTranscriptionService.start() called while signed out.',
+      );
+    }
+    final token = await user.getIdToken();
 
     final uri = Uri.parse('$base/transcribe/stream').replace(
       queryParameters: {
         'locale': localeId,
-        if (AppConfig.backendAuthToken.isNotEmpty)
-          'token': AppConfig.backendAuthToken,
+        'token': token,
       },
     );
 

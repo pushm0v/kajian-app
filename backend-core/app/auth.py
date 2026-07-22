@@ -114,3 +114,29 @@ async def current_admin(user: User = Depends(current_user)) -> User:
     if not user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
+
+
+async def current_user_ws(token: str | None, db: AsyncSession) -> User:
+    """Same verification as [current_user], for WebSocket routes.
+
+    WebSocket clients can't reliably set custom headers during the
+    handshake (browsers' WebSocket API in particular has no header API at
+    all), so the token travels as a `?token=` query parameter instead — see
+    routers/streaming.py. Raises HTTPException same as current_user; the
+    caller is responsible for translating that into a WS close before
+    accept() (FastAPI can't send a normal HTTP error response mid-handshake).
+    """
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing token")
+
+    if config.DEV_AUTH_BYPASS:
+        return await _get_or_create_user(db, token, None, None, None)
+
+    claims = await _verify_token(token)
+    return await _get_or_create_user(
+        db,
+        firebase_uid=claims["uid"],
+        email=claims.get("email"),
+        name=claims.get("name"),
+        picture=claims.get("picture"),
+    )
