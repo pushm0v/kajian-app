@@ -20,10 +20,30 @@ English, and Arabic**.
    fast/offline live captions + accurate cloud pass.
 4. **AI notes** are generated from the transcript with an LLM (Claude): a
    summary, key points, topics, Quran/Hadith references, and action items.
-5. **Library** of all your saved kajian, stored locally on the device.
+5. **Library** of all your saved kajian — cached locally for offline use, and
+   synced (audio, transcripts, notes) to your account once you sign in and a
+   backend is configured.
+6. **Admin dashboard** (`admin/`) for browsing users, sessions, audio and
+   transcripts across the whole platform.
 
 > Runs fully in **mock mode** with no backend or API keys, so you can build and
 > demo the entire flow immediately.
+
+## Repo layout
+
+```
+lib/, android/, ios/, test/    The Flutter app (see below)
+backend-core/                  Users, sessions, transcripts, notes, audio
+                                storage, admin API — the app's server, and
+                                the one you actually deploy (docs/BACKEND.md)
+backend/                       Qwen3-ASR-1.7B transcription worker (vLLM)
+backend-whisper/               Whisper large-v3 transcription worker
+                                (faster-whisper) — backend-core proxies
+                                /transcribe to whichever of these you run
+admin/                         Next.js admin dashboard for backend-core
+benchmark/                     Head-to-head harness for the two ASR workers
+docs/                          Setup guides (see below)
+```
 
 ## Architecture
 
@@ -38,13 +58,18 @@ lib/
 │   └── utils/formatters.dart       Duration / date formatting
 ├── models/                   KajianSession, TranscriptSegment, KajianNote
 ├── services/
-│   ├── audio_recorder_service.dart      record plugin (m4a capture + levels)
-│   ├── live_transcription_service.dart  on-device speech_to_text (live)
-│   ├── cloud_transcription_service.dart Whisper via backend (accurate)
-│   ├── ai_notes_service.dart            Claude notes via backend
-│   └── storage_service.dart            local JSON persistence
+│   ├── auth_service.dart                   Firebase Auth (Google / Apple sign-in)
+│   ├── audio_recorder_service.dart         record plugin (m4a capture + levels)
+│   ├── live_transcription_service.dart     on-device speech_to_text (live)
+│   ├── on_device_transcription_service.dart On-device transcription mode
+│   ├── cloud_transcription_service.dart    Cloud ASR (Qwen/Whisper) via backend
+│   ├── cloud_streaming_transcription_service.dart  Live cloud captions (WS)
+│   ├── ai_notes_service.dart               Claude notes (direct, dev fallback)
+│   ├── core_api_client.dart                backend-core client (sessions,
+│   │                                       transcribe, summarize, audio URLs)
+│   └── storage_service.dart                local JSON persistence (offline cache)
 ├── providers/
-│   ├── session_provider.dart      Library state + processing pipeline
+│   ├── session_provider.dart      Library state, local-cache + server sync
 │   └── recording_controller.dart  Live recording session state
 ├── screens/
 │   ├── home/                  Session library + record FAB
@@ -54,10 +79,14 @@ lib/
 ```
 
 **State management:** `provider` (ChangeNotifier) — approachable and dependency-light.
-**Transcription:** hybrid — `speech_to_text` (live/offline) + cloud Whisper (accurate).
-**Notes:** LLM summarization behind a backend proxy (see `docs/BACKEND.md`).
-**Storage:** local JSON via `path_provider` (swap for sqflite/Drift later — the
-`StorageService` boundary keeps that change localised).
+**Transcription:** hybrid — `speech_to_text` (live/offline) + a cloud ASR model
+(Qwen3-ASR or Whisper large-v3, user's choice) for an accurate pass.
+**Notes:** LLM summarization via `backend-core` (falls back to a direct dev-only
+call when no backend is configured).
+**Storage:** local JSON cache (`StorageService`, via `path_provider`) that always
+works offline, plus server-authoritative sync to `backend-core` — sessions,
+transcripts, notes, and audio — once you're signed in and `BACKEND_BASE_URL` is
+set. See `docs/BACKEND.md`.
 
 ## Getting started
 
@@ -81,13 +110,20 @@ dart run flutter_launcher_icons
 flutter run
 ```
 
-### Wiring real transcription + notes
+### Wiring real transcription, notes + sync
 
-Stand up the backend from `docs/BACKEND.md`, then run pointing at it:
+Deploy `backend-core/` (see `docs/BACKEND.md` and `backend-core/README.md` —
+it in turn talks to the `backend/`/`backend-whisper/` ASR workers and to
+Anthropic), then run pointing at it:
 
 ```bash
 flutter run --dart-define=BACKEND_BASE_URL=https://api.yourdomain.com
 ```
+
+Once you're signed in (Firebase Auth) and this is set, the app syncs your
+sessions, transcripts, notes, and audio to your account via `backend-core` —
+see `docs/BACKEND.md` for the full picture, including running the two ASR
+workers side by side and managing everything from `admin/`.
 
 Optionally override the notes model:
 
@@ -110,11 +146,13 @@ flutter run \
 - [ ] Editable transcript with re-generate notes
 - [ ] Playback with tap-to-seek from transcript timestamps
 - [ ] Search across all kajian by topic/reference
-- [ ] Cloud sync & multi-device backup
+- [x] Cloud sync & multi-device backup (`backend-core/`)
 - [ ] Export notes to PDF / Markdown / share sheet
 
 ## Security
 
 Never embed provider API keys in the app bundle — always proxy through your
 backend. See `docs/BACKEND.md`. The `.gitignore` excludes `.env` and
-`lib/core/config/secrets.dart` to help avoid committing secrets.
+`lib/core/config/secrets.dart` to help avoid committing secrets. Auth uses
+Firebase ID tokens, verified server-side by `backend-core` — it never trusts a
+client-asserted user ID.
