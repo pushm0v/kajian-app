@@ -71,11 +71,15 @@ def test_transcribe_returns_segments(client):
         files={"audio": ("kajian.wav", _make_wav_bytes(1.0), "audio/wav")},
     )
     assert resp.status_code == 200
-    assert resp.json() == {
-        "segments": [
-            {"id": "0", "text": "halo dunia", "startMs": 0, "endMs": 1200, "isFinal": True},
-        ]
-    }
+    body = resp.json()
+    assert body["segments"] == [
+        {"id": "0", "text": "halo dunia", "startMs": 0, "endMs": 1200, "isFinal": True},
+    ]
+    # Additive benchmarking metadata (see benchmark/ harness).
+    assert isinstance(body["processing_ms"], int) and body["processing_ms"] >= 0
+    assert body["audio_seconds"] == 1.2
+    assert body["model"] == config.MODEL_SIZE
+    assert "device" in body
 
 
 def test_transcribe_rejects_oversized_upload(monkeypatch, client):

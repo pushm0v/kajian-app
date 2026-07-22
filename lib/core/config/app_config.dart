@@ -45,6 +45,23 @@ class AppConfig {
   /// Whisper model for cloud transcription (via your backend).
   static const String cloudTranscriptionModel = 'whisper-1';
 
+  static const String _qwenBaseUrlEnv =
+      String.fromEnvironment('QWEN_BASE_URL', defaultValue: '');
+  static const String _whisperBaseUrlEnv =
+      String.fromEnvironment('WHISPER_BASE_URL', defaultValue: '');
+
+  /// Base URL of the Qwen3-ASR backend (`backend/`). Falls back to
+  /// [backendBaseUrl] when `QWEN_BASE_URL` isn't set, so single-backend
+  /// setups keep working unchanged. Set both `QWEN_BASE_URL` and
+  /// `WHISPER_BASE_URL` to let the user choose between the two in Settings.
+  static String get qwenBaseUrl =>
+      _qwenBaseUrlEnv.isNotEmpty ? _qwenBaseUrlEnv : backendBaseUrl;
+
+  /// Base URL of the Whisper backend (`backend-whisper/`). Falls back to
+  /// [backendBaseUrl] when `WHISPER_BASE_URL` isn't set.
+  static String get whisperBaseUrl =>
+      _whisperBaseUrlEnv.isNotEmpty ? _whisperBaseUrlEnv : backendBaseUrl;
+
   /// True when no backend is configured. In this state the cloud transcription
   /// and AI-notes services return realistic mock data so the UI is testable.
   static bool get isMockMode =>

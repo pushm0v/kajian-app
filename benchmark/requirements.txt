@@ -1,0 +1,6 @@
+# Benchmark harness deps. Deliberately tiny.
+requests>=2.31
+
+# Optional: for audio-duration fallback when a backend doesn't report
+# `audio_seconds`, the harness shells out to `ffprobe` (from ffmpeg) if it's
+# on PATH. No Python package needed for that.

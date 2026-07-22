@@ -27,6 +27,25 @@ the whole flow without any backend.
 > Neither implements `/summarize`; pair either with your own summarize
 > backend or leave that endpoint unconfigured.
 
+### Letting users pick the model in the app
+
+Deploy both backends and give each its own URL, and the app's **Settings →
+Model cloud** picker lets the user choose which one transcribes their kajian:
+
+```bash
+flutter run \
+  --dart-define=QWEN_BASE_URL=https://qwen.yourdomain.com \
+  --dart-define=WHISPER_BASE_URL=https://whisper.yourdomain.com
+```
+
+Each of `QWEN_BASE_URL` / `WHISPER_BASE_URL` falls back to `BACKEND_BASE_URL`
+when unset, so a single-backend setup keeps working (both entries just point at
+the one backend). The picker only offers a model whose URL is configured; the
+chosen model is remembered across sessions. Live cloud captions during
+recording still use the Qwen backend (it's the one with `WS /transcribe/stream`).
+
+To benchmark the two head-to-head, see `../benchmark/`.
+
 ## Contract
 
 ### `POST /transcribe`
@@ -37,9 +56,19 @@ Response:
 {
   "segments": [
     { "id": "0", "text": "Alhamdulillah…", "startMs": 0, "endMs": 8000, "isFinal": true }
-  ]
+  ],
+  "processing_ms": 1234,
+  "audio_seconds": 60.0,
+  "model": "Qwen/Qwen3-ASR-1.7B",
+  "device": "cuda:0"
 }
 ```
+
+`segments` is the only field the app reads. `processing_ms`, `audio_seconds`,
+`model`, and `device` are **additive metadata** (server-side inference time,
+transcribed-audio duration, and which model/device served the request) used by
+the `benchmark/` harness to compare backends fairly — clients ignore unknown
+keys. Both reference backends (`backend/`, `backend-whisper/`) include them.
 
 ### `POST /summarize`
 JSON body: `{ "transcript": "…", "title": "…", "model": "claude-sonnet-5" }`

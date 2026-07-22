@@ -101,11 +101,14 @@ def test_transcribe_requires_ffmpeg_and_returns_segments(monkeypatch, client):
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert body == {
-        "segments": [
-            {"id": "0", "text": "halo dunia", "startMs": 0, "endMs": 30000, "isFinal": True},
-        ]
-    }
+    assert body["segments"] == [
+        {"id": "0", "text": "halo dunia", "startMs": 0, "endMs": 30000, "isFinal": True},
+    ]
+    # Additive benchmarking metadata (see benchmark/ harness).
+    assert isinstance(body["processing_ms"], int) and body["processing_ms"] >= 0
+    assert body["audio_seconds"] == 30.0
+    assert body["model"] == config.MODEL_ID
+    assert "device" in body
 
 
 def test_transcribe_rejects_oversized_upload(monkeypatch, client):
