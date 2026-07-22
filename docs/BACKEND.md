@@ -37,9 +37,19 @@ Response:
 {
   "segments": [
     { "id": "0", "text": "Alhamdulillah…", "startMs": 0, "endMs": 8000, "isFinal": true }
-  ]
+  ],
+  "processing_ms": 1234,
+  "audio_seconds": 60.0,
+  "model": "Qwen/Qwen3-ASR-1.7B",
+  "device": "cuda:0"
 }
 ```
+
+`segments` is the only field the app reads. `processing_ms`, `audio_seconds`,
+`model`, and `device` are **additive metadata** (server-side inference time,
+transcribed-audio duration, and which model/device served the request) used by
+the `benchmark/` harness to compare backends fairly — clients ignore unknown
+keys. Both reference backends (`backend/`, `backend-whisper/`) include them.
 
 ### `POST /summarize`
 JSON body: `{ "transcript": "…", "title": "…", "model": "claude-sonnet-5" }`

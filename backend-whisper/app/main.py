@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import time
 import uuid
 from contextlib import asynccontextmanager
 
@@ -92,8 +93,23 @@ async def transcribe(
                     raise HTTPException(status_code=413, detail="Audio file too large")
                 f.write(chunk)
 
+        started = time.monotonic()
         segments = model.transcribe(tmp_path, locale)
-        return {"segments": segments}
+        processing_ms = round((time.monotonic() - started) * 1000)
+        # Duration of transcribed audio, derived from the last segment's end.
+        audio_seconds = (
+            max((s["endMs"] for s in segments), default=0) / 1000.0
+        )
+        # `processing_ms`/`audio_seconds`/`model`/`device` are additive
+        # metadata for benchmarking (see benchmark/ in the Flutter repo). The
+        # app ignores unknown keys and only reads `segments`.
+        return {
+            "segments": segments,
+            "processing_ms": processing_ms,
+            "audio_seconds": round(audio_seconds, 3),
+            "model": config.MODEL_SIZE,
+            "device": model.device,
+        }
     except HTTPException:
         raise
     except Exception as e:  # noqa: BLE001 - convert to the app's expected error shape

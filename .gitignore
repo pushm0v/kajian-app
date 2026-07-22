@@ -55,3 +55,11 @@ __pycache__/
 .pytest_cache/
 backend/.env
 *.egg-info/
+
+# Benchmark harness (local outputs / venv)
+benchmark/.venv/
+benchmark/report.md
+benchmark/rows.csv
+benchmark/samples/
+benchmark/refs/
+benchmark/dump/
