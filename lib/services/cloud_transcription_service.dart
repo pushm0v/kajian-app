@@ -21,15 +21,22 @@ class CloudTranscriptionService {
       : _client = client ?? http.Client();
 
   /// Transcribe [audioFilePath]. [localeId] hints the spoken language.
+  ///
+  /// [baseUrl] selects which backend to hit (e.g. the Qwen or Whisper server);
+  /// when null/empty it falls back to [AppConfig.backendBaseUrl]. If the
+  /// resolved URL is empty and no dev key is set, returns mock data.
   Future<List<TranscriptSegment>> transcribe({
     required String audioFilePath,
     required String localeId,
+    String? baseUrl,
   }) async {
-    if (AppConfig.isMockMode) {
+    final resolved =
+        (baseUrl == null || baseUrl.isEmpty) ? AppConfig.backendBaseUrl : baseUrl;
+    if (resolved.isEmpty && AppConfig.devDirectProviderKey.isEmpty) {
       return _mockTranscript();
     }
 
-    final uri = Uri.parse('${AppConfig.backendBaseUrl}/transcribe');
+    final uri = Uri.parse('$resolved/transcribe');
     final request = http.MultipartRequest('POST', uri)
       ..fields['locale'] = localeId
       ..fields['model'] = AppConfig.cloudTranscriptionModel

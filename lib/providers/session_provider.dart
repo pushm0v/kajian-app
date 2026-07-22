@@ -82,6 +82,10 @@ class SessionProvider extends ChangeNotifier {
       await upsert(session.copyWith(status: SessionStatus.transcribing));
       try {
         final mode = await _settings.getTranscriptionMode();
+        // Cloud mode: route to the user's chosen backend (Qwen / Whisper).
+        final cloudBaseUrl = mode == TranscriptionMode.cloud
+            ? (await _settings.getCloudModel()).baseUrl
+            : null;
         final segments = mode == TranscriptionMode.onDevice
             ? await _onDevice.transcribe(
                 audioFilePath: session.audioFilePath!,
@@ -90,6 +94,7 @@ class SessionProvider extends ChangeNotifier {
             : await _cloud.transcribe(
                 audioFilePath: session.audioFilePath!,
                 localeId: session.localeId,
+                baseUrl: cloudBaseUrl,
               );
         session = byId(id)!.copyWith(
           transcript: segments,
