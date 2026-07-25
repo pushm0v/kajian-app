@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kajian backend-core — dev console</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #2a2f3a;
+    --text: #e6e8eb;
+    --muted: #8b93a3;
+    --accent: #5b8def;
+    --ok: #4caf7d;
+    --err: #e56b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  h1 span { color: var(--muted); font-weight: 400; }
+  main {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 24px;
+    display: grid;
+    gap: 20px;
+  }
+  section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  section h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  input[type="text"], input[type="password"], select {
+    width: 100%;
+    background: #0d0f14;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font: inherit;
+  }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 180px; }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 9px 16px;
+    border-radius: 6px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.secondary { background: #2a2f3a; }
+  button.danger { background: var(--err); }
+  .actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
+  .status-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted); margin-right: 6px;
+  }
+  .status-dot.ok { background: var(--ok); }
+  .status-dot.err { background: var(--err); }
+  .status-dot.live { background: var(--accent); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  pre {
+    background: #0d0f14;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    max-height: 260px;
+    overflow: auto;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .caption-box {
+    background: #0d0f14;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    min-height: 60px;
+    font-size: 15px;
+  }
+  .caption-box.interim { color: var(--muted); font-style: italic; }
+  .log {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+  }
+  .log .t { color: var(--muted); }
+  .log .err { color: var(--err); }
+  .log .ok { color: var(--ok); }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    background: #2a2f3a;
+    color: var(--muted);
+  }
+  .field-note { font-size: 11px; color: var(--muted); margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Kajian backend-core <span>dev console</span></h1>
+  <div><span class="status-dot" id="healthDot"></span><span id="healthText">not checked</span></div>
+</header>
+
+<main>
+
+  <section>
+    <h2>Connection</h2>
+    <div class="row">
+      <div>
+        <label for="baseUrl">backend-core base URL</label>
+        <input type="text" id="baseUrl" value="http://localhost:8090" />
+      </div>
+      <div>
+        <label for="devToken">Auth token</label>
+        <input type="text" id="devToken" value="dev-console-user" />
+        <div class="field-note">
+          With <code>CORE_DEV_AUTH_BYPASS=true</code> on the server, any string here
+          becomes your Firebase-UID stand-in — the same value always maps to the same
+          auto-provisioned user. With bypass off, paste a real Firebase ID token.
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="checkHealth">Check /health</button>
+      <span class="pill" id="userPill">no user yet</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>1. Session</h2>
+    <div class="row">
+      <div>
+        <label for="sessionTitle">Title</label>
+        <input type="text" id="sessionTitle" value="Dev console test session" />
+      </div>
+      <div>
+        <label for="localeId">Locale</label>
+        <input type="text" id="localeId" value="id_ID" />
+      </div>
+    </div>
+    <div class="actions">
+      <button id="createSession">Create session</button>
+      <span class="pill" id="sessionPill">no session yet</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Upload audio + transcribe</h2>
+    <div class="row">
+      <div>
+        <label for="audioFile">Audio file (.m4a / .wav / .mp3)</label>
+        <input type="text" id="audioFileName" disabled placeholder="No file chosen" />
+        <input type="file" id="audioFile" accept="audio/*" style="margin-top:6px" />
+      </div>
+      <div>
+        <label for="asrModel">Model</label>
+        <select id="asrModel">
+          <option value="qwen">qwen</option>
+          <option value="whisper">whisper</option>
+        </select>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="uploadAndTranscribe">Upload + transcribe</button>
+    </div>
+    <div style="margin-top:14px">
+      <label>Transcript</label>
+      <pre id="transcriptOut">(none yet)</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. Summarize</h2>
+    <div class="actions">
+      <button id="summarize">Generate notes</button>
+    </div>
+    <div style="margin-top:14px">
+      <label>Notes</label>
+      <pre id="notesOut">(none yet)</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>4. Live mic streaming (WS /transcribe/stream)</h2>
+    <div class="actions">
+      <button id="startStream">Start recording</button>
+      <button id="stopStream" class="danger" disabled>Stop + finalize</button>
+      <span class="status-dot" id="streamDot"></span><span id="streamStatus">idle</span>
+    </div>
+    <div style="margin-top:14px">
+      <label>Live caption</label>
+      <div class="caption-box interim" id="captionBox">—</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <div class="actions">
+      <button class="secondary" id="clearLog">Clear</button>
+    </div>
+    <pre class="log" id="logOut"></pre>
+  </section>
+
+</main>
+
+<script>
+"use strict";
+
+// ---- small helpers -------------------------------------------------------
+
+const $ = (id) => document.getElementById(id);
+
+function log(message, kind) {
+  const el = $("logOut");
+  const time = new Date().toISOString().split("T")[1].replace("Z", "");
+  const cls = kind ? ` class="${kind}"` : "";
+  el.innerHTML += `<span class="t">[${time}]</span> <span${cls}>${escapeHtml(message)}</span>\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+function baseUrl() {
+  return $("baseUrl").value.trim().replace(/\/$/, "");
+}
+
+function authToken() {
+  return $("devToken").value.trim();
+}
+
+function wsUrl(path) {
+  const u = new URL(baseUrl() + path);
+  u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
+  return u;
+}
+
+async function api(method, path, body, opts) {
+  opts = opts || {};
+  const headers = { Authorization: `Bearer ${authToken()}` };
+  let fetchBody = body;
+  if (body !== undefined && !(body instanceof Blob) && !(body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+    fetchBody = JSON.stringify(body);
+  }
+  const resp = await fetch(baseUrl() + path, {
+    method,
+    headers: opts.rawHeaders ? opts.rawHeaders : headers,
+    body: fetchBody,
+  });
+  const text = await resp.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
+  if (!resp.ok) {
+    throw new Error(`${method} ${path} -> ${resp.status}: ${text.slice(0, 500)}`);
+  }
+  return json;
+}
+
+let uuidCounter = 0;
+function makeSessionId() {
+  // Good enough for a dev tool — doesn't need to be cryptographically random,
+  // just unique per page session.
+  return `dev-${Date.now()}-${uuidCounter++}`;
+}
+
+// ---- state ----------------------------------------------------------------
+
+let currentSessionId = null;
+
+// ---- 0. connection ----------------------------------------------------
+
+$("checkHealth").addEventListener("click", async () => {
+  const dot = $("healthDot");
+  const text = $("healthText");
+  try {
+    const resp = await fetch(baseUrl() + "/health");
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const body = await resp.json();
+    dot.className = "status-dot ok";
+    text.textContent = `ok (${JSON.stringify(body)})`;
+    log("Health check passed", "ok");
+
+    // /me also confirms auth is wired up correctly, and shows which user
+    // this token maps to.
+    const me = await api("GET", "/me");
+    $("userPill").textContent = `${me.email || me.id} ${me.isAdmin ? "(admin)" : ""}`;
+    log(`Signed in as user id=${me.id}`, "ok");
+  } catch (e) {
+    dot.className = "status-dot err";
+    text.textContent = "unreachable";
+    log(`Health/auth check failed: ${e.message}`, "err");
+  }
+});
+
+// ---- 1. session ---------------------------------------------------------
+
+$("createSession").addEventListener("click", async () => {
+  try {
+    currentSessionId = makeSessionId();
+    const session = await api("POST", "/sessions", {
+      id: currentSessionId,
+      title: $("sessionTitle").value || "Untitled",
+      createdAt: new Date().toISOString(),
+      localeId: $("localeId").value || "id_ID",
+    });
+    $("sessionPill").textContent = `session ${session.id}`;
+    log(`Created session ${session.id}`, "ok");
+  } catch (e) {
+    log(`Create session failed: ${e.message}`, "err");
+  }
+});
+
+// ---- 2. upload + transcribe --------------------------------------------
+
+$("audioFile").addEventListener("change", () => {
+  const f = $("audioFile").files[0];
+  $("audioFileName").value = f ? `${f.name} (${Math.round(f.size / 1024)} KB)` : "";
+});
+
+$("uploadAndTranscribe").addEventListener("click", async () => {
+  if (!currentSessionId) { log("Create a session first.", "err"); return; }
+  const file = $("audioFile").files[0];
+  if (!file) { log("Choose an audio file first.", "err"); return; }
+
+  try {
+    log("Requesting presigned upload URL…");
+    const { uploadUrl } = await api(
+      "POST", `/sessions/${currentSessionId}/audio-upload-url`,
+    );
+
+    log("Uploading audio directly to object storage…");
+    const putResp = await fetch(uploadUrl, {
+      method: "PUT",
+      body: file,
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+    });
+    if (!putResp.ok) throw new Error(`Presigned PUT failed: HTTP ${putResp.status}`);
+
+    log("Confirming upload with backend-core…");
+    await api("POST", `/sessions/${currentSessionId}/audio-confirm`);
+
+    log(`Running ASR proxy (model=${$("asrModel").value})… this can take a while`);
+    const session = await api(
+      "POST", `/sessions/${currentSessionId}/transcribe`,
+      { model: $("asrModel").value },
+    );
+    $("transcriptOut").textContent = JSON.stringify(session.transcript, null, 2);
+    log(`Transcribe complete: ${session.transcript.length} segment(s)`, "ok");
+  } catch (e) {
+    log(`Upload/transcribe failed: ${e.message}`, "err");
+  }
+});
+
+// ---- 3. summarize ---------------------------------------------------------
+
+$("summarize").addEventListener("click", async () => {
+  if (!currentSessionId) { log("Create a session first.", "err"); return; }
+  try {
+    log("Requesting summary…");
+    const session = await api("POST", `/sessions/${currentSessionId}/summarize`, {});
+    $("notesOut").textContent = JSON.stringify(session.note, null, 2);
+    log("Summarize complete", "ok");
+  } catch (e) {
+    log(`Summarize failed: ${e.message}`, "err");
+  }
+});
+
+// ---- 4. live mic streaming ------------------------------------------------
+//
+// Mirrors lib/services/cloud_streaming_transcription_service.dart's wire
+// protocol: binary PCM16LE mono 16kHz frames in, JSON
+// {"type":"partial"|"final"|"error","text":...} frames out, "__end__" text
+// frame to signal completion. Browsers don't expose raw PCM capture
+// directly, so this uses an AudioWorklet to downsample/convert
+// Float32 -> Int16 from the mic's native sample rate to 16kHz.
+
+const STREAM_SAMPLE_RATE = 16000;
+
+let audioCtx = null;
+let micStream = null;
+let workletNode = null;
+let ws = null;
+
+const WORKLET_SOURCE = `
+class PcmDownsampler extends AudioWorkletProcessor {
+  constructor(options) {
+    super();
+    this.targetRate = options.processorOptions.targetRate;
+    this.ratio = sampleRate / this.targetRate;
+    this._carry = 0;
+  }
+  process(inputs) {
+    const input = inputs[0];
+    if (!input || !input[0]) return true;
+    const channel = input[0];
+    const outLength = Math.floor((channel.length + this._carry) / this.ratio);
+    if (outLength <= 0) { this._carry += channel.length; return true; }
+    const out = new Int16Array(outLength);
+    let pos = this._carry;
+    for (let i = 0; i < outLength; i++) {
+      const idx = Math.min(Math.floor(pos), channel.length - 1);
+      const s = Math.max(-1, Math.min(1, channel[idx]));
+      out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      pos += this.ratio;
+    }
+    this._carry = pos - channel.length;
+    this.port.postMessage(out.buffer, [out.buffer]);
+    return true;
+  }
+}
+registerProcessor("pcm-downsampler", PcmDownsampler);
+`;
+
+async function startStreaming() {
+  if (!currentSessionId) log("(no session created yet — streaming doesn't need one, but note it won't be saved anywhere)");
+
+  const dot = $("streamDot");
+  const statusText = $("streamStatus");
+  const captionBox = $("captionBox");
+
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioCtx = new AudioContext();
+
+    const blob = new Blob([WORKLET_SOURCE], { type: "application/javascript" });
+    await audioCtx.audioWorklet.addModule(URL.createObjectURL(blob));
+
+    const source = audioCtx.createMediaStreamSource(micStream);
+    workletNode = new AudioWorkletNode(audioCtx, "pcm-downsampler", {
+      processorOptions: { targetRate: STREAM_SAMPLE_RATE },
+    });
+
+    const url = wsUrl("/transcribe/stream");
+    url.searchParams.set("locale", $("localeId").value || "id_ID");
+    url.searchParams.set("token", authToken());
+
+    ws = new WebSocket(url.toString());
+    ws.binaryType = "arraybuffer";
+
+    ws.onopen = () => {
+      dot.className = "status-dot live";
+      statusText.textContent = "streaming";
+      log("WebSocket connected, streaming mic audio…", "ok");
+      source.connect(workletNode);
+      // Route through a zero-gain node rather than leaving the worklet
+      // unconnected: some browsers stop pulling audio through a node with
+      // no path to the destination, which would silently stall capture.
+      // Zero gain avoids feeding the mic back into the speakers.
+      const silentSink = audioCtx.createGain();
+      silentSink.gain.value = 0;
+      workletNode.connect(silentSink).connect(audioCtx.destination);
+      workletNode.port.onmessage = (event) => {
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(event.data);
+      };
+      $("startStream").disabled = true;
+      $("stopStream").disabled = false;
+    };
+
+    ws.onmessage = (event) => {
+      let msg;
+      try { msg = JSON.parse(event.data); } catch { return; }
+      if (msg.type === "partial") {
+        captionBox.textContent = msg.text || "…";
+        captionBox.className = "caption-box interim";
+      } else if (msg.type === "final") {
+        captionBox.textContent = msg.text || "(empty)";
+        captionBox.className = "caption-box";
+        log(`Final transcript: ${msg.text}`, "ok");
+      } else if (msg.type === "error") {
+        log(`Stream error from server: ${msg.message}`, "err");
+      }
+    };
+
+    ws.onerror = () => log("WebSocket error", "err");
+    ws.onclose = (event) => {
+      dot.className = event.wasClean ? "status-dot" : "status-dot err";
+      statusText.textContent = `closed (${event.code})`;
+      $("startStream").disabled = false;
+      $("stopStream").disabled = true;
+      log(`WebSocket closed (code=${event.code})`);
+    };
+  } catch (e) {
+    log(`Failed to start streaming: ${e.message}`, "err");
+    await teardownStreaming();
+  }
+}
+
+async function stopStreaming() {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    log("Sending __end__, waiting for final transcript…");
+    ws.send("__end__");
+  }
+  await teardownStreaming();
+}
+
+async function teardownStreaming() {
+  if (workletNode) { workletNode.disconnect(); workletNode = null; }
+  if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
+  if (audioCtx) { await audioCtx.close(); audioCtx = null; }
+  // Leave `ws` itself alone here — after "__end__" it should receive one
+  // more "final" message before the server closes it; onclose handles
+  // re-enabling the Start button.
+}
+
+$("startStream").addEventListener("click", startStreaming);
+$("stopStream").addEventListener("click", stopStreaming);
+
+// ---- log ------------------------------------------------------------------
+
+$("clearLog").addEventListener("click", () => { $("logOut").textContent = ""; });
+
+log("Dev console loaded. Set the base URL/token above, then click \"Check /health\".");
+</script>
+</body>
+</html>
