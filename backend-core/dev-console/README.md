@@ -29,6 +29,14 @@ Then in the page:
    any string becomes a stable Firebase-UID stand-in; the same string
    always maps to the same auto-provisioned user. Click **Check /health**
    to confirm connectivity and see which user you're signed in as.
+
+   The **Environment** dropdown lets you save the current URL/token as a
+   named preset (e.g. "local", "production") via **Save as…**, and switch
+   between saved presets without retyping either — stored in this
+   browser's `localStorage` only, nothing is sent anywhere. Editing the
+   URL/token fields is just editing: nothing is saved until you click
+   **Save as…** again (same name overwrites); switching environments or
+   reloading without saving discards the in-progress edit.
 2. **Session** — creates a session row to attach audio/transcript/notes to.
 3. **Upload + transcribe** — picks a local audio file, walks through the
    real presigned-upload-URL flow (mint URL → PUT directly to MinIO/S3 →
