@@ -19,12 +19,26 @@ def _env_float(name: str, default: float) -> float:
     return float(raw) if raw else default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    return raw.lower() in ("1", "true", "yes") if raw else default
+
+
 # Hugging Face model id for the ASR model.
 MODEL_ID = os.environ.get("ASR_MODEL_ID", "Qwen/Qwen3-ASR-1.7B")
 
 # Fraction of GPU memory vLLM is allowed to reserve. Both official Qwen3-ASR
 # vLLM examples use 0.8; lower this on a GPU shared with other workloads.
 GPU_MEMORY_UTILIZATION = _env_float("ASR_GPU_MEMORY_UTILIZATION", 0.8)
+
+# Skip vLLM's torch.compile/CUDA-graph capture at startup. Defaults to True:
+# on this deploy we hit a segfault inside a `dynamo__custom_eval_frame`
+# native frame during engine-core init (TorchDynamo JIT-compiling CUDA
+# kernels), with no other repo/driver change to explain it. Eager mode
+# trades some inference throughput for a startup path that doesn't touch
+# the compiler at all. Set ASR_ENFORCE_EAGER=false to re-enable compilation
+# once the underlying incompatibility is root-caused.
+ENFORCE_EAGER = _env_bool("ASR_ENFORCE_EAGER", True)
 
 # Chunk length used for both timestamping and to keep each inference call
 # well under the model's ~20-minute limit. 30s chunks keep memory/latency
