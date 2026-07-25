@@ -1,4 +1,6 @@
-.PHONY: help devices ios ios-real ios-sim ios-clean disk android
+.PHONY: help devices ios ios-real ios-sim ios-clean disk android dev-console
+
+DEV_CONSOLE_PORT ?= 8091
 
 help:
 	@echo "Targets:"
@@ -9,6 +11,7 @@ help:
 	@echo "  make ios-clean   - flutter clean + reinstall CocoaPods (fixes stale-build errors)"
 	@echo "  make disk        - Show free disk space (iOS builds need a few GB free)"
 	@echo "  make android     - Run on a connected Android device/emulator"
+	@echo "  make dev-console - Serve backend-core's dev console and open it in a browser"
 
 devices:
 	flutter devices
@@ -55,3 +58,14 @@ disk:
 android:
 	flutter devices
 	flutter run -d $$(flutter devices 2>/dev/null | awk -F'•' '/android/ {gsub(/ /,"",$$2); print $$2; exit}')
+
+# Serves backend-core/dev-console/ over plain HTTP (not file://, which
+# getUserMedia/AudioWorklet reject) and opens it in the default browser.
+# backend-core itself must already be running separately — see
+# backend-core/README.md — this only serves the static test page.
+dev-console:
+	@echo "Serving backend-core/dev-console/ at http://localhost:$(DEV_CONSOLE_PORT)"
+	@echo "backend-core itself must be running separately (see backend-core/README.md)."
+	@echo "Press Ctrl-C to stop."
+	@( sleep 1 && open http://localhost:$(DEV_CONSOLE_PORT) ) &
+	@cd backend-core/dev-console && python3 -m http.server $(DEV_CONSOLE_PORT)
