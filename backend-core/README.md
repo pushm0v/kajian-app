@@ -82,6 +82,14 @@ alembic upgrade head
 uvicorn app.main:app --host 0.0.0.0 --port 8080
 ```
 
+## Testing without the Flutter app
+
+`dev-console/` is a single self-contained HTML page for exercising this
+API directly — upload an audio file and run transcribe + summarize, or
+stream live mic audio through `WS /transcribe/stream` — with no Flutter
+build, no Firebase sign-in (set `CORE_DEV_AUTH_BYPASS=true`), and no npm
+install. See `dev-console/README.md`.
+
 ## Running tests
 
 These are integration tests against a **real Postgres** (not a mocked
