@@ -139,6 +139,23 @@
     <h2>Connection</h2>
     <div class="row">
       <div>
+        <label for="envSelect">Environment</label>
+        <select id="envSelect"></select>
+        <div class="field-note">
+          Switching environments swaps the URL/token below and remembers them
+          in this browser (<code>localStorage</code>) — nothing is sent
+          anywhere else. Editing the fields below only changes what's saved
+          once you click <strong>Save as…</strong> (same name overwrites);
+          switching away or reloading without saving discards the edit.
+        </div>
+      </div>
+      <div style="flex: 0 0 auto; align-self: flex-end; display: flex; gap: 8px; padding-bottom: 4px;">
+        <button class="secondary" id="saveEnv">Save as…</button>
+        <button class="danger" id="deleteEnv">Delete</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div>
         <label for="baseUrl">backend-core base URL</label>
         <input type="text" id="baseUrl" value="http://localhost:8090" />
       </div>
@@ -302,6 +319,106 @@ function makeSessionId() {
 // ---- state ----------------------------------------------------------------
 
 let currentSessionId = null;
+
+// ---- environments (localStorage-backed presets) ---------------------------
+//
+// Lets you flip between e.g. "local" and "production" without retyping the
+// base URL/token every time. Nothing here ever leaves this browser — it's
+// just localStorage, keyed under one namespaced key so it doesn't collide
+// with anything else on localhost.
+
+const ENV_STORAGE_KEY = "kajianDevConsole.environments";
+const LAST_ENV_STORAGE_KEY = "kajianDevConsole.lastEnv";
+
+const DEFAULT_ENVIRONMENTS = {
+  "local": { baseUrl: "http://localhost:8090", token: "dev-console-user" },
+};
+
+function loadEnvironments() {
+  try {
+    const raw = localStorage.getItem(ENV_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_ENVIRONMENTS };
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : { ...DEFAULT_ENVIRONMENTS };
+  } catch {
+    return { ...DEFAULT_ENVIRONMENTS };
+  }
+}
+
+function saveEnvironments(envs) {
+  localStorage.setItem(ENV_STORAGE_KEY, JSON.stringify(envs));
+}
+
+function populateEnvSelect(envs, selected) {
+  const select = $("envSelect");
+  select.innerHTML = "";
+  for (const name of Object.keys(envs)) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    select.appendChild(opt);
+  }
+  if (selected && envs[selected]) select.value = selected;
+}
+
+function applyEnvironment(name, envs) {
+  const env = envs[name];
+  if (!env) return;
+  $("baseUrl").value = env.baseUrl || "";
+  $("devToken").value = env.token || "";
+  localStorage.setItem(LAST_ENV_STORAGE_KEY, name);
+}
+
+function initEnvironments() {
+  const envs = loadEnvironments();
+  const lastEnv = localStorage.getItem(LAST_ENV_STORAGE_KEY);
+  const selected = lastEnv && envs[lastEnv] ? lastEnv : Object.keys(envs)[0];
+  populateEnvSelect(envs, selected);
+  applyEnvironment(selected, envs);
+}
+
+$("envSelect").addEventListener("change", () => {
+  applyEnvironment($("envSelect").value, loadEnvironments());
+  log(`Switched to environment "${$("envSelect").value}"`);
+});
+
+// Deliberately no auto-save on baseUrl/devToken edits: typing into these
+// fields is just editing, nothing persists until "Save as…" is clicked.
+// An earlier version snapshotted every keystroke onto whatever environment
+// was selected — so typing a *new* production URL while "local" was still
+// selected silently overwrote "local"'s saved values before you got a
+// chance to save the new one under its own name. Explicit save avoids that.
+
+$("saveEnv").addEventListener("click", () => {
+  const suggested = $("envSelect").value || "production";
+  const name = prompt("Save current URL/token as environment named:", suggested);
+  if (!name) return;
+  const envs = loadEnvironments();
+  envs[name] = { baseUrl: $("baseUrl").value.trim(), token: $("devToken").value.trim() };
+  saveEnvironments(envs);
+  populateEnvSelect(envs, name);
+  localStorage.setItem(LAST_ENV_STORAGE_KEY, name);
+  log(`Saved environment "${name}"`, "ok");
+});
+
+$("deleteEnv").addEventListener("click", () => {
+  const envs = loadEnvironments();
+  const name = $("envSelect").value;
+  if (!name || !envs[name]) return;
+  if (Object.keys(envs).length <= 1) {
+    log("Can't delete the last remaining environment.", "err");
+    return;
+  }
+  if (!confirm(`Delete environment "${name}"?`)) return;
+  delete envs[name];
+  saveEnvironments(envs);
+  const next = Object.keys(envs)[0];
+  populateEnvSelect(envs, next);
+  applyEnvironment(next, envs);
+  log(`Deleted environment "${name}", switched to "${next}"`);
+});
+
+initEnvironments();
 
 // ---- 0. connection ----------------------------------------------------
 
