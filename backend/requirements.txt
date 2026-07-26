@@ -1,7 +1,17 @@
 fastapi>=0.115
 uvicorn[standard]>=0.32
 python-multipart>=0.0.12
-numpy>=1.26
+# vLLM 0.14.0 pins numba==0.61.2 for its speculative-decoding utilities,
+# and numba 0.61.2 only supports numpy up to 2.2 (see
+# https://numba.readthedocs.io/en/stable/release/0.61.2-notes.html). Neither
+# vLLM's nor qwen-asr's own requirements set a numpy upper bound, so an
+# unconstrained `numpy>=1.26` here let pip resolve a too-new numpy that
+# silently breaks numba's compiled ABI — no import-time error, just a
+# segfault the first time numba's JIT-compiled code actually runs (which is
+# during vLLM's dummy forward pass at engine startup). Keep this pinned
+# below numba's ceiling.
+numpy>=1.26,<2.3
+numba==0.61.2
 # The vllm extra pulls in vLLM (pinned to 0.14.0 by qwen-asr's own
 # pyproject.toml) plus its own compatible torch build — do not also pin a
 # bare `torch` line here, it can conflict with vLLM's required version.
