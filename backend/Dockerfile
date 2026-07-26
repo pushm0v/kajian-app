@@ -88,8 +88,17 @@ ENV HF_HOME=/srv/.cache/huggingface
 # nagisa stub install above) rather than PyTorch itself. Left in place
 # as a harmless extra safety margin — remove if it's ever confirmed
 # unnecessary, since it disables some faster CPU codepaths.
+#
+# VLLM_ATTENTION_BACKEND=TRITON_ATTN: forced after enforce_eager alone did
+# not fix a segfault inside the EngineCore subprocess during the dummy
+# forward pass used to profile KV cache memory (crash was in the audio
+# encoder's attention op, right after "Encoder cache will be initialized").
+# Default FLASH_ATTN kernels are a plausible culprit on this GPU/driver
+# combo (RTX 3080 Ti, flashinfer-cubin not installed); Triton's kernels
+# don't depend on the same compiled library. Remove once root-caused.
 ENV VLLM_LOGGING_LEVEL=DEBUG \
     CUDA_LAUNCH_BLOCKING=1 \
-    ATEN_CPU_CAPABILITY=default
+    ATEN_CPU_CAPABILITY=default \
+    VLLM_ATTENTION_BACKEND=TRITON_ATTN
 
 CMD ["python3.11", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "debug"]
