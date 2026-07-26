@@ -58,8 +58,8 @@ class AsrModel:
             return
         self._log_gpu_diagnostics()
         logger.info(
-            "Loading %s via vLLM (gpu_memory_utilization=%.2f) ...",
-            config.MODEL_ID, config.GPU_MEMORY_UTILIZATION,
+            "Loading %s via vLLM (gpu_memory_utilization=%.2f, enforce_eager=%s) ...",
+            config.MODEL_ID, config.GPU_MEMORY_UTILIZATION, config.ENFORCE_EAGER,
         )
         # Imported lazily so config-only tooling doesn't need qwen_asr/vllm
         # installed (e.g. this module is imported by tests that mock it out).
@@ -68,6 +68,7 @@ class AsrModel:
         self._model = Qwen3ASRModel.LLM(
             model=config.MODEL_ID,
             gpu_memory_utilization=config.GPU_MEMORY_UTILIZATION,
+            enforce_eager=config.ENFORCE_EAGER,
         )
         logger.info("Model loaded.")
 
