@@ -58,8 +58,13 @@ COPY requirements.txt .
 # (apt-installed pip refuses a bare `pip install` outside a venv) —
 # --break-system-packages is safe here since this image exists solely to
 # run this one app; there's no other system Python consumer to protect.
-RUN python3 -m pip install --break-system-packages --upgrade pip \
-    && python3 -m pip install --break-system-packages -r requirements.txt
+#
+# Deliberately NOT running `pip install --upgrade pip` first: apt's pip
+# package (24.0) is installed without the RECORD metadata file pip's own
+# in-place-upgrade path expects, so pip trying to uninstall itself to
+# upgrade fails ("Cannot uninstall pip 24.0, RECORD file not found").
+# 24.0 is new enough to install everything in requirements.txt correctly.
+RUN python3 -m pip install --break-system-packages -r requirements.txt
 
 COPY app ./app
 
