@@ -31,14 +31,14 @@ MODEL_ID = os.environ.get("ASR_MODEL_ID", "Qwen/Qwen3-ASR-1.7B")
 # vLLM examples use 0.8; lower this on a GPU shared with other workloads.
 GPU_MEMORY_UTILIZATION = _env_float("ASR_GPU_MEMORY_UTILIZATION", 0.8)
 
-# Skip vLLM's torch.compile/CUDA-graph capture at startup. Defaults to True:
-# on this deploy we hit a segfault inside a `dynamo__custom_eval_frame`
-# native frame during engine-core init (TorchDynamo JIT-compiling CUDA
-# kernels), with no other repo/driver change to explain it. Eager mode
-# trades some inference throughput for a startup path that doesn't touch
-# the compiler at all. Set ASR_ENFORCE_EAGER=false to re-enable compilation
-# once the underlying incompatibility is root-caused.
-ENFORCE_EAGER = _env_bool("ASR_ENFORCE_EAGER", True)
+# Skip vLLM's torch.compile/CUDA-graph capture at startup. Defaults to
+# False (let vLLM compile normally) — this was previously forced True while
+# chasing a startup segfault that turned out to be caused by a version
+# mismatch in how the model was being loaded (see asr_model.py's module
+# docstring), not compilation. Kept as an escape hatch: set
+# ASR_ENFORCE_EAGER=true to trade some inference throughput for a startup
+# path that skips the compiler entirely, if ever needed again.
+ENFORCE_EAGER = _env_bool("ASR_ENFORCE_EAGER", False)
 
 # Chunk length used for both timestamping and to keep each inference call
 # well under the model's ~20-minute limit. 30s chunks keep memory/latency
@@ -67,9 +67,9 @@ WORK_DIR = os.environ.get("ASR_WORK_DIR", "/tmp/kajian-asr")
 
 # --- Live streaming (/transcribe/stream WebSocket) -------------------------
 #
-# These map directly to qwen_asr's Qwen3ASRModel.init_streaming_state(...)
-# kwargs. See backend/README.md for what each one means; defaults here match
-# the official streaming example in the Qwen3-ASR repo.
+# These control the streaming decode loop in asr_model.py. See
+# backend/README.md for what each one means; defaults here match the
+# official streaming example in the Qwen3-ASR repo.
 STREAM_CHUNK_SIZE_SEC = _env_float("ASR_STREAM_CHUNK_SIZE_SEC", 2.0)
 STREAM_UNFIXED_CHUNK_NUM = _env_int("ASR_STREAM_UNFIXED_CHUNK_NUM", 2)
 STREAM_UNFIXED_TOKEN_NUM = _env_int("ASR_STREAM_UNFIXED_TOKEN_NUM", 5)

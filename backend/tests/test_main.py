@@ -1,5 +1,5 @@
 """Integration tests for the FastAPI app, with the actual ASR model mocked
-out (no GPU / qwen-asr install required to run these)."""
+out (no GPU / vLLM install required to run these)."""
 
 import io
 import os
@@ -21,7 +21,7 @@ class _FakeStreamState:
 
 class _FakeModel:
     """Drop-in replacement for AsrModel that returns canned text without
-    touching vllm/qwen_asr at all."""
+    touching vllm at all."""
 
     is_loaded = True
     device = "cpu"
@@ -32,7 +32,7 @@ class _FakeModel:
     def transcribe_chunk(self, audio, sample_rate, language):
         return "halo dunia" if len(audio) > 0 else ""
 
-    def new_streaming_state(self):
+    def new_streaming_state(self, language=None):
         return _FakeStreamState()
 
     def streaming_transcribe(self, pcm16k, state):
