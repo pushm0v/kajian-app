@@ -6,17 +6,13 @@
 # is backward-compatible with CUDA 12.8 userspace libs — so a too-old
 # driver was ruled out as the cause of the SIGILL crash below.
 #
-# CUDA VERSION: pip-installed torch (pulled in by qwen-asr[vllm]==0.14.0,
-# which pins torch==2.9.1) bundles its OWN CUDA 12.8 runtime libraries
-# (nvidia-cuda-runtime-cu12==12.8.90, etc.) regardless of what's baked into
-# this base image — the base image's system CUDA toolkit is really only
-# used at `pip install` time for any packages that invoke nvcc directly.
-# Was previously pinned to 12.4.1; bumped to 12.8.1 to match what
-# torch/vLLM actually run with, for consistency even though the driver
-# check above ruled out this being the crash's root cause. If qwen-asr's
-# pinned vllm/torch versions change later, check
-# https://pypi.org/pypi/torch/<version>/json for the current
-# nvidia-cuda-runtime-cu12 version and match this base image to it.
+# CUDA VERSION: pip-installed torch (pulled in transitively by
+# vllm==0.19.1, pinned in requirements.txt) bundles its OWN CUDA runtime
+# libraries regardless of what's baked into this base image — the base
+# image's system CUDA toolkit is really only used at `pip install` time for
+# any packages that invoke nvcc directly. If the pinned vllm version
+# changes later, check https://pypi.org/pypi/torch/<version>/json for the
+# current nvidia-cuda-runtime-cu12 version and match this base image to it.
 #
 # NOTE: uses the "devel" (not "runtime") CUDA base because vLLM's install
 # can require nvcc/build tooling for some kernels.
@@ -36,33 +32,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /srv
 
-# Install a stub `nagisa` package BEFORE qwen-asr, so pip's resolver sees
-# nagisa==0.2.11 as already satisfied and never installs the real one.
-#
-# Root cause (confirmed via `dmesg` on the deploy host — kernel logged
-# `trap invalid opcode ... in libdynet-*.so`): qwen_asr's own
-# __init__.py unconditionally imports qwen3_forced_aligner.py, which
-# does `import nagisa` at module level — even though nagisa is only
-# ever used for Japanese-specific tokenization inside a class
-# (Qwen3ForcedAligner) this backend never instantiates. The real
-# nagisa package pulls in a prebuilt dyNET binary that's compiled with
-# `-march=native` (hardcoded in dynet's own CMakeLists.txt, no override
-# flag exists) — so it crashes with SIGILL (exit code 132) on any host
-# whose CPU doesn't match the exact instruction set of PyPI's build
-# machine. See stubs/nagisa_stub/nagisa/__init__.py for the full
-# writeup and what happens if the stub's tagging() is ever actually
-# called (it isn't, on our code paths).
-COPY stubs/nagisa_stub /tmp/nagisa_stub
-RUN python3.11 -m pip install --upgrade pip \
-    && python3.11 -m pip install /tmp/nagisa_stub \
-    && rm -rf /tmp/nagisa_stub
+# Historical note: this image used to install a stub `nagisa` package here
+# to work around a SIGILL crash caused by the `qwen-asr` package's forced
+# aligner pulling in a prebuilt dyNET binary compiled with `-march=native`.
+# That whole code path is gone now that app/asr_model.py calls vllm.LLM(...)
+# directly instead of going through qwen-asr's wrapper — nagisa/dynet are
+# never imported. See git history (stubs/nagisa_stub/, removed) if this
+# ever needs revisiting.
 
 COPY requirements.txt .
-# qwen-asr[vllm] pulls vLLM 0.14.0 (pinned by qwen-asr itself) plus a
-# compatible torch build automatically. --no-deps on qwen-asr itself
-# isn't used here (we still want its other real dependencies) — only
-# nagisa is being substituted, via the stub installed above.
-RUN python3.11 -m pip install -r requirements.txt
+RUN python3.11 -m pip install --upgrade pip \
+    && python3.11 -m pip install -r requirements.txt
 
 COPY app ./app
 
@@ -83,22 +63,23 @@ ENV HF_HOME=/srv/.cache/huggingface
 #
 # ATEN_CPU_CAPABILITY=default forces PyTorch's CPU-side ops onto the
 # safest, universally-supported instruction dispatch path. This was an
-# earlier attempt at fixing the SIGILL crash below, before `dmesg` on
-# the deploy host pinpointed the actual cause as nagisa/dynet (see the
-# nagisa stub install above) rather than PyTorch itself. Left in place
-# as a harmless extra safety margin — remove if it's ever confirmed
-# unnecessary, since it disables some faster CPU codepaths.
+# earlier attempt at fixing a since-resolved SIGILL crash, before `dmesg`
+# on the deploy host pinpointed the actual cause as qwen-asr's nagisa/dynet
+# dependency (see the Dockerfile's history/git log — that whole code path
+# is gone now, see WORKDIR /srv above). Left in place as a harmless extra
+# safety margin — remove if it's ever confirmed unnecessary, since it
+# disables some faster CPU codepaths.
 #
-# VLLM_ATTENTION_BACKEND=TRITON_ATTN: forced after enforce_eager alone did
-# not fix a segfault inside the EngineCore subprocess during the dummy
-# forward pass used to profile KV cache memory (crash was in the audio
-# encoder's attention op, right after "Encoder cache will be initialized").
-# Default FLASH_ATTN kernels are a plausible culprit on this GPU/driver
-# combo (RTX 3080 Ti, flashinfer-cubin not installed); Triton's kernels
-# don't depend on the same compiled library. Remove once root-caused.
+# enforce_eager and a forced attention backend (previously
+# VLLM_ATTENTION_BACKEND=TRITON_ATTN) were tried and did NOT fix a
+# different, later segfault — that crash's real cause turned out to be
+# app/asr_model.py going through the `qwen-asr` package's own out-of-tree
+# vLLM model registration, written against vllm==0.14.0's internals and
+# never updated for vLLM's later native Qwen3-ASR support. Calling
+# vllm.LLM(...) directly (see asr_model.py) removes that version-skewed
+# code path entirely, so neither workaround is needed anymore.
 ENV VLLM_LOGGING_LEVEL=DEBUG \
     CUDA_LAUNCH_BLOCKING=1 \
-    ATEN_CPU_CAPABILITY=default \
-    VLLM_ATTENTION_BACKEND=TRITON_ATTN
+    ATEN_CPU_CAPABILITY=default
 
 CMD ["python3.11", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "debug"]

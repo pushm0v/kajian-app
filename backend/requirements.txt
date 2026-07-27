@@ -1,20 +1,29 @@
 fastapi>=0.115
 uvicorn[standard]>=0.32
 python-multipart>=0.0.12
-# vLLM 0.14.0 pins numba==0.61.2 for its speculative-decoding utilities,
-# and numba 0.61.2 only supports numpy up to 2.2 (see
-# https://numba.readthedocs.io/en/stable/release/0.61.2-notes.html). Neither
-# vLLM's nor qwen-asr's own requirements set a numpy upper bound, so an
-# unconstrained `numpy>=1.26` here let pip resolve a too-new numpy that
-# silently breaks numba's compiled ABI — no import-time error, just a
-# segfault the first time numba's JIT-compiled code actually runs (which is
-# during vLLM's dummy forward pass at engine startup). Keep this pinned
-# below numba's ceiling.
+# vLLM pins numba==0.61.2 for its speculative-decoding utilities, and numba
+# 0.61.2 only supports numpy up to 2.2 (see
+# https://numba.readthedocs.io/en/stable/release/0.61.2-notes.html). vLLM's
+# own requirements leave numpy unpinned, so an unconstrained `numpy` here
+# let pip resolve a too-new numpy that silently broke numba's compiled ABI
+# — no import-time error, just a segfault the first time numba's
+# JIT-compiled code actually ran (during vLLM's dummy forward pass at
+# engine startup). Keep this pinned below numba's ceiling regardless of
+# which vLLM version is in use.
 numpy>=1.26,<2.3
 numba==0.61.2
-# The vllm extra pulls in vLLM (pinned to 0.14.0 by qwen-asr's own
-# pyproject.toml) plus its own compatible torch build — do not also pin a
-# bare `torch` line here, it can conflict with vLLM's required version.
-# qwen-asr's published versions are all 0.0.x so far (no 0.1+ release
-# exists) — check https://pypi.org/project/qwen-asr/ before bumping this.
-qwen-asr[vllm]>=0.0.6
+# We call vllm.LLM(...) directly (see asr_model.py) instead of going
+# through the qwen-asr package's own wrapper/model registration — qwen-asr
+# pins vllm==0.14.0 and ships its own out-of-tree vLLM model class written
+# against that version's internals. vLLM absorbed Qwen3-ASR as a native,
+# first-party model (same architecture name) starting at v0.16.0; qwen-asr's
+# custom registration was never updated to match, and that version skew
+# caused a reproducible segfault deep in the audio encoder's attention path
+# during engine startup. Pin an exact, tested vLLM version rather than a
+# floor — do not add a bare `torch` line, vLLM pulls its own required torch
+# build (see requirements/cuda.txt in the vLLM repo at this tag).
+vllm==0.19.1
+# Needed directly now (previously came transitively via qwen-asr) for
+# AutoTokenizer.from_pretrained(...).apply_chat_template(...) — this is
+# what builds the audio-prompt string asr_model.py sends to vLLM.
+transformers>=4.56.0,!=5.0.*,!=5.1.*,!=5.2.*,!=5.3.*,!=5.4.*,!=5.5.0

@@ -78,8 +78,9 @@ param instead).
 
 ### Streaming tuning (`init_streaming_state` kwargs)
 
-These map directly to `qwen_asr`'s `init_streaming_state(...)` parameters —
-defaults match the official Qwen3-ASR streaming example:
+These control the streaming decode loop in `app/asr_model.py` (chunk size
+and prefix-rollback strategy) — defaults match the official Qwen3-ASR
+streaming example:
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -165,11 +166,12 @@ the UI shows — the container id changes every restart, so grab it with
   of VRAM. Check `dmesg | grep -i kill` or the host's own resource
   graphs in Dokploy for an OOM kill around the crash time.
 
-**Exit code 132 (SIGILL / illegal instruction) — confirmed root cause and
-fix already applied:** GPU visibility, VRAM, and driver version were all
-ruled out on a real deployment (RTX 3080 Ti, 12.2GB free, driver
-595.71.05/CUDA 13.2). The actual cause was found via `dmesg -T` on the
-Dokploy host, which logged the exact crashing library:
+**Exit code 132 (SIGILL / illegal instruction) — historical, no longer
+applicable:** this backend used to load the model via the `qwen-asr`
+package's `Qwen3ASRModel.LLM(...)` wrapper. GPU visibility, VRAM, and
+driver version were all ruled out on a real deployment (RTX 3080 Ti,
+12.2GB free, driver 595.71.05/CUDA 13.2). The actual cause was found via
+`dmesg -T` on the Dokploy host, which logged the exact crashing library:
 
 ```
 traps: python3.11[...] trap invalid opcode ... in libdynet-*.so
@@ -180,26 +182,25 @@ shows no Python traceback at all — Python can't catch a SIGILL, but the
 kernel always logs which binary faulted and at what instruction.
 
 `libdynet` is a dependency of `nagisa` (a Japanese-language tokenizer).
-`qwen_asr`'s own `__init__.py` unconditionally imports
+`qwen_asr`'s own `__init__.py` unconditionally imported
 `qwen3_forced_aligner.py`, which does `import nagisa` at module
 level — even though nagisa is only ever used for Japanese-specific
 tokenization inside `Qwen3ForcedAligner`, a class this backend never
-instantiates (see "Why chunk-based timestamps" above — we don't use
+instantiated (see "Why chunk-based timestamps" above — we don't use
 the forced aligner at all). `dynet`'s own `CMakeLists.txt` hardcodes
-`-march=native` with no override flag, so its PyPI wheel only runs
+`-march=native` with no override flag, so its PyPI wheel only ran
 correctly on a CPU with the exact instruction set of whatever machine
 built it — a classic "works on the CI builder, SIGILLs everywhere
 else" bug class, unrelated to CUDA/vLLM/PyTorch entirely.
 
-**Fix:** `stubs/nagisa_stub/` is a minimal fake `nagisa` package,
-installed by the Dockerfile *before* `qwen-asr`, so pip's resolver sees
-`nagisa==0.2.11` as already satisfied and never installs the real,
-crashing one. Verified this survives real dependency resolution against
-the full `qwen-asr[vllm]` install (not just `--no-deps`) and that
-`import qwen_asr` succeeds cleanly with the stub in place. If
-`Qwen3ForcedAligner`'s Japanese path is ever actually needed in the
-future, the stub's `tagging()` raises `NotImplementedError` with an
-explanation, rather than crashing the whole process.
+This entire code path is gone now: `app/asr_model.py` calls
+`vllm.LLM(...)` directly (see its module docstring for why — `qwen-asr`'s
+own vLLM integration turned out to be pinned to a much older vLLM version
+than what's actually needed, which caused a *separate*, later segfault).
+`qwen_asr`/`nagisa`/`dynet` are no longer installed or imported at all,
+so this whole failure mode can't recur. Left here for the `dmesg`
+debugging technique, which is broadly useful for any future
+no-Python-traceback crash.
 
 ### Error: `fatal error: Python.h: No such file or directory`
 
@@ -218,7 +219,7 @@ cd backend
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
-pip install -r requirements.txt  # pulls vLLM + a compatible torch build automatically
+pip install -r requirements.txt  # installs pinned vLLM + its own compatible torch build
 
 cp .env.example .env  # edit as needed
 export $(grep -v '^#' .env | xargs)  # load .env into the shell
@@ -231,8 +232,7 @@ manager if not already present.
 
 ## Running tests
 
-Tests mock out the actual model (no GPU / vLLM / `qwen-asr` install
-required):
+Tests mock out the actual model (no GPU / vLLM install required):
 
 ```bash
 cd backend

@@ -46,7 +46,7 @@ async def run_streaming_session(websocket: WebSocket, model: AsrModel, locale: s
     await websocket.accept()
 
     language = model.normalize_language(locale)
-    state = model.new_streaming_state()
+    state = model.new_streaming_state(language)
     logger.info("Streaming session started, language=%s", language or "auto")
 
     try:
