@@ -198,7 +198,7 @@ class AsrModel:
         )
         # Imported lazily so config-only tooling doesn't need vllm/transformers
         # installed (e.g. this module is imported by tests that mock it out).
-        from transformers import AutoTokenizer  # noqa: PLC0415
+        from transformers import AutoProcessor  # noqa: PLC0415
         from vllm import LLM, SamplingParams  # noqa: PLC0415
 
         llm_kwargs = {}
@@ -212,7 +212,17 @@ class AsrModel:
             max_model_len=config.MAX_MODEL_LEN,
             **llm_kwargs,
         )
-        self._tokenizer = AutoTokenizer.from_pretrained(config.MODEL_ID)
+        # Qwen3-ASR's chat template lives on the processor config, not the
+        # plain tokenizer's — AutoTokenizer.from_pretrained(MODEL_ID) loads a
+        # bare Qwen2Tokenizer with chat_template=None (confirmed empirically
+        # against transformers 5.14.1, the version this repo's pin actually
+        # resolves to) and apply_chat_template() raises ValueError. Qwen3ASR
+        # is natively registered in transformers (models/qwen3_asr/), so
+        # AutoProcessor resolves it without trust_remote_code or any repo-
+        # hosted custom code. self._tokenizer keeps its name for the
+        # .encode()/.decode() calls used elsewhere in this class — the
+        # processor exposes both those and apply_chat_template().
+        self._tokenizer = AutoProcessor.from_pretrained(config.MODEL_ID)
         self._sampling_params = SamplingParams(temperature=0.0, max_tokens=4096)
         logger.info("Model loaded.")
 
@@ -321,7 +331,11 @@ class AsrModel:
         emits U+FFFD for a truncated multi-byte sequence)."""
         if state.chunk_id < state.unfixed_chunk_num:
             return ""
-        ids = self._tokenizer.encode(state._raw_decoded)
+        # self._tokenizer is a Qwen3ASRProcessor (see load()) — it doesn't
+        # proxy .encode(), only .decode() (a passthrough to the underlying
+        # tokenizer in "raw" mode), so .encode() must go through .tokenizer
+        # explicitly.
+        ids = self._tokenizer.tokenizer.encode(state._raw_decoded)
         k = state.unfixed_token_num
         while True:
             end_idx = max(0, len(ids) - k)
