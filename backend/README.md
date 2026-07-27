@@ -216,7 +216,7 @@ the Dockerfile's `apt-get install` line.
 
 ```bash
 cd backend
-python3.11 -m venv .venv
+python3 -m venv .venv  # Python 3.10+ (the container image uses 3.12)
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt  # installs pinned vLLM + its own compatible torch build

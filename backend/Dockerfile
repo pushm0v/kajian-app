@@ -2,9 +2,19 @@
 # (required for the live-streaming endpoint — see app/asr_model.py).
 # Requires the NVIDIA Container Toolkit on the host (`docker run --gpus all
 # ...` / the `deploy.resources.reservations.devices` block in
-# docker-compose.yml). Confirmed host driver 595.71.05 / CUDA 13.2, which
-# is backward-compatible with CUDA 12.8 userspace libs — so a too-old
-# driver was ruled out as the cause of the SIGILL crash below.
+# docker-compose.yml). Host driver 595.71.05 / CUDA 13.2.
+#
+# Matches the host's CUDA 13.2 driver directly (was 12.8.1, bumped while
+# investigating a persistent encoder-profiling segfault on this GPU — see
+# ASR_MM_ENCODER_ATTN_BACKEND's comment in config.py for that
+# investigation's full history; whether the CUDA version itself was ever
+# a factor is unconfirmed, this was one of the remaining variables to
+# rule out). NVIDIA only publishes CUDA 13.x base images on Ubuntu 24.04
+# (no -ubuntu22.04 variant exists for this CUDA series), which is why
+# this now installs Python 3.12 (24.04's default `python3`/`python3-dev`)
+# instead of the previous 3.11 — confirmed the full pinned dependency
+# stack (vllm==0.19.1, torch==2.10.0, numba==0.61.2, numpy<2.3,
+# transformers) all publish proper cp312 wheels, no source builds needed.
 #
 # CUDA VERSION: pip-installed torch (pulled in transitively by
 # vllm==0.19.1, pinned in requirements.txt) bundles its OWN CUDA runtime
@@ -22,12 +32,15 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-# python3.11-dev (Python.h) + build-essential (gcc/make) are required by
+# python3-dev (Python.h) + build-essential (gcc/make) are required by
 # vLLM, which JIT-compiles a CUDA utility file at engine startup — without
 # them it fails with "fatal error: Python.h: No such file or directory"
-# right as the vLLM engine core process starts.
+# right as the vLLM engine core process starts. Ubuntu 24.04's `python3`
+# is 3.12 (no separate `python3.12` package/venv/dev split needed the way
+# 22.04 required explicitly naming `python3.11` — 24.04's `python3` IS
+# 3.12).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3.11 python3.11-venv python3.11-dev python3-pip ffmpeg build-essential \
+        python3 python3-venv python3-dev python3-pip ffmpeg build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv
@@ -41,8 +54,12 @@ WORKDIR /srv
 # ever needs revisiting.
 
 COPY requirements.txt .
-RUN python3.11 -m pip install --upgrade pip \
-    && python3.11 -m pip install -r requirements.txt
+# Ubuntu 24.04's system Python is PEP 668 "externally managed"
+# (apt-installed pip refuses a bare `pip install` outside a venv) —
+# --break-system-packages is safe here since this image exists solely to
+# run this one app; there's no other system Python consumer to protect.
+RUN python3 -m pip install --break-system-packages --upgrade pip \
+    && python3 -m pip install --break-system-packages -r requirements.txt
 
 COPY app ./app
 
@@ -86,4 +103,4 @@ ENV VLLM_LOGGING_LEVEL=DEBUG \
     CUDA_LAUNCH_BLOCKING=1 \
     ATEN_CPU_CAPABILITY=default
 
-CMD ["python3.11", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "debug"]
+CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "debug"]
