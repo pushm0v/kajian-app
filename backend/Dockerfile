@@ -16,7 +16,7 @@
 #
 # NOTE: uses the "devel" (not "runtime") CUDA base because vLLM's install
 # can require nvcc/build tooling for some kernels.
-FROM nvidia/cuda:12.8.1-devel-ubuntu22.04
+FROM nvidia/cuda:13.2.0-devel-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
