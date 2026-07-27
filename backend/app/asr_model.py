@@ -192,9 +192,9 @@ class AsrModel:
         self._log_gpu_diagnostics()
         logger.info(
             "Loading %s via vLLM (gpu_memory_utilization=%.2f, enforce_eager=%s, "
-            "mm_encoder_attn_backend=%s) ...",
+            "mm_encoder_attn_backend=%s, max_model_len=%d) ...",
             config.MODEL_ID, config.GPU_MEMORY_UTILIZATION, config.ENFORCE_EAGER,
-            config.MM_ENCODER_ATTN_BACKEND or "(vllm default)",
+            config.MM_ENCODER_ATTN_BACKEND or "(vllm default)", config.MAX_MODEL_LEN,
         )
         # Imported lazily so config-only tooling doesn't need vllm/transformers
         # installed (e.g. this module is imported by tests that mock it out).
@@ -209,6 +209,7 @@ class AsrModel:
             model=config.MODEL_ID,
             gpu_memory_utilization=config.GPU_MEMORY_UTILIZATION,
             enforce_eager=config.ENFORCE_EAGER,
+            max_model_len=config.MAX_MODEL_LEN,
             **llm_kwargs,
         )
         self._tokenizer = AutoTokenizer.from_pretrained(config.MODEL_ID)
