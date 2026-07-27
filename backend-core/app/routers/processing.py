@@ -11,6 +11,7 @@ directly and pushing the result up itself.
 
 from __future__ import annotations
 
+import logging
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,6 +25,8 @@ from ..models.transcript_segment import TranscriptSegment
 from ..models.user import User
 from ..services import asr_proxy, notes, storage
 from .sessions import _get_owned_session, _to_out
+
+logger = logging.getLogger("kajian_core")
 
 router = APIRouter(prefix="/sessions", tags=["processing"])
 
@@ -44,13 +47,23 @@ async def transcribe_session(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=f"Unknown model: {body.model}") from e
 
+    logger.info(
+        "transcribe_session %s: starting (model=%s, object_key=%s)",
+        session_id, model.value, session.audio_object_key,
+    )
     os.makedirs(config.WORK_DIR, exist_ok=True)
     local_path = os.path.join(config.WORK_DIR, f"{session_id}.m4a")
     try:
+        logger.info("transcribe_session %s: downloading audio ...", session_id)
         storage.download_to_path(session.audio_object_key, local_path)
+        logger.info(
+            "transcribe_session %s: downloaded %d bytes, calling ASR proxy ...",
+            session_id, os.path.getsize(local_path),
+        )
         try:
             result = await asr_proxy.transcribe(model, local_path, session.locale_id)
         except asr_proxy.AsrModelUnavailable as e:
+            logger.warning("transcribe_session %s: model unavailable: %s", session_id, e)
             raise HTTPException(status_code=503, detail=str(e)) from e
 
         # Mutate through the ORM relationship (not a raw DELETE by
@@ -69,6 +82,10 @@ async def transcribe_session(
             )
         session.status = session.status.__class__.transcribed
         await db.commit()
+        logger.info(
+            "transcribe_session %s: done, %d segment(s) persisted",
+            session_id, len(result.get("segments", [])),
+        )
     finally:
         if os.path.exists(local_path):
             os.remove(local_path)

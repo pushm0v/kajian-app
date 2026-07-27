@@ -265,6 +265,10 @@ function log(message, kind) {
   const cls = kind ? ` class="${kind}"` : "";
   el.innerHTML += `<span class="t">[${time}]</span> <span${cls}>${escapeHtml(message)}</span>\n`;
   el.scrollTop = el.scrollHeight;
+  // Also mirror to the browser console — the on-page panel is easy to miss
+  // (or lose if the tab reloads), and devtools is the natural place to look
+  // when something silently hangs or fails.
+  (kind === "err" ? console.error : console.log)(`[dev-console] ${message}`);
 }
 
 function escapeHtml(s) {

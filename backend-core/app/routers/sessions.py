@@ -9,6 +9,8 @@ file; that's an admin-only concern (see routers/admin.py).
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +24,8 @@ from ..models.kajian_session import KajianSession
 from ..models.transcript_segment import TranscriptSegment
 from ..models.user import User
 from ..services import storage
+
+logger = logging.getLogger("kajian_core")
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -202,6 +206,7 @@ async def get_audio_upload_url(
     confirm once the upload finishes, so the DB row knows audio exists."""
     session = await _get_owned_session(db, user, session_id)
     object_key = storage.object_key_for_session(str(user.id), session.id)
+    logger.info("audio-upload-url: session=%s object_key=%s", session_id, object_key)
     return schemas.AudioUploadUrlOut(
         uploadUrl=storage.presigned_upload_url(object_key), objectKey=object_key
     )
@@ -216,6 +221,9 @@ async def confirm_audio_uploaded(
     session = await _get_owned_session(db, user, session_id)
     session.audio_object_key = storage.object_key_for_session(str(user.id), session.id)
     await db.commit()
+    logger.info(
+        "audio-confirm: session=%s object_key=%s", session_id, session.audio_object_key,
+    )
     return _to_out(await _get_owned_session(db, user, session_id))
 
 
