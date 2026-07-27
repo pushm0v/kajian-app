@@ -70,14 +70,18 @@ ENV HF_HOME=/srv/.cache/huggingface
 # safety margin — remove if it's ever confirmed unnecessary, since it
 # disables some faster CPU codepaths.
 #
-# enforce_eager and a forced attention backend (previously
-# VLLM_ATTENTION_BACKEND=TRITON_ATTN) were tried and did NOT fix a
-# different, later segfault — that crash's real cause turned out to be
-# app/asr_model.py going through the `qwen-asr` package's own out-of-tree
-# vLLM model registration, written against vllm==0.14.0's internals and
-# never updated for vLLM's later native Qwen3-ASR support. Calling
-# vllm.LLM(...) directly (see asr_model.py) removes that version-skewed
-# code path entirely, so neither workaround is needed anymore.
+# enforce_eager (config.py's ASR_ENFORCE_EAGER, default true) and a forced
+# attention backend (previously VLLM_ATTENTION_BACKEND=TRITON_ATTN, since
+# removed) were first tried to fix a segfault whose real cause turned out
+# to be app/asr_model.py going through the `qwen-asr` package's own
+# out-of-tree vLLM model registration, written against vllm==0.14.0's
+# internals and never updated for vLLM's later native Qwen3-ASR support.
+# Calling vllm.LLM(...) directly (see asr_model.py) removes that
+# version-skewed code path entirely — but with compilation re-enabled on
+# vLLM's own native model, engine startup segfaults again, this time
+# inside Inductor's compiled-graph pipeline itself, on the same GPU/driver
+# combo (RTX 3080 Ti). enforce_eager is staying on as the default for that
+# reason; see config.py's ASR_ENFORCE_EAGER comment for the full history.
 ENV VLLM_LOGGING_LEVEL=DEBUG \
     CUDA_LAUNCH_BLOCKING=1 \
     ATEN_CPU_CAPABILITY=default
