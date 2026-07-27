@@ -32,13 +32,19 @@ MODEL_ID = os.environ.get("ASR_MODEL_ID", "Qwen/Qwen3-ASR-1.7B")
 GPU_MEMORY_UTILIZATION = _env_float("ASR_GPU_MEMORY_UTILIZATION", 0.8)
 
 # Skip vLLM's torch.compile/CUDA-graph capture at startup. Defaults to
-# False (let vLLM compile normally) — this was previously forced True while
-# chasing a startup segfault that turned out to be caused by a version
-# mismatch in how the model was being loaded (see asr_model.py's module
-# docstring), not compilation. Kept as an escape hatch: set
-# ASR_ENFORCE_EAGER=true to trade some inference throughput for a startup
-# path that skips the compiler entirely, if ever needed again.
-ENFORCE_EAGER = _env_bool("ASR_ENFORCE_EAGER", False)
+# True. This was briefly set to False after fixing an unrelated segfault
+# (a qwen-asr/vLLM version mismatch — see asr_model.py's module docstring),
+# on the theory that compilation itself was never the problem. It wasn't
+# on THAT code path, but with compilation re-enabled on vLLM 0.19.1's
+# native model, engine startup segfaults again — this time inside
+# Inductor's compiled-graph pipeline itself (right after
+# FixFunctionalizationPass), on the same RTX 3080 Ti/driver combo. Two
+# separate vLLM versions and two separate model-loading paths have now
+# both hit real problems in vLLM's compile pipeline on this hardware, so
+# eager mode is staying on as the default rather than a one-off diagnostic.
+# Set ASR_ENFORCE_EAGER=false to re-enable compilation if this is ever
+# revisited (e.g. after a driver/toolkit upgrade).
+ENFORCE_EAGER = _env_bool("ASR_ENFORCE_EAGER", True)
 
 # Chunk length used for both timestamping and to keep each inference call
 # well under the model's ~20-minute limit. 30s chunks keep memory/latency
