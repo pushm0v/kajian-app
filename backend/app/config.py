@@ -46,6 +46,29 @@ GPU_MEMORY_UTILIZATION = _env_float("ASR_GPU_MEMORY_UTILIZATION", 0.8)
 # revisited (e.g. after a driver/toolkit upgrade).
 ENFORCE_EAGER = _env_bool("ASR_ENFORCE_EAGER", True)
 
+# Attention backend for the audio ENCODER specifically — a separate vLLM
+# setting from the decoder LM's attention backend (there's no encoder-only
+# override on our vLLM version's Python API otherwise). Defaults to
+# "TRITON_ATTN". With enforce_eager alone, engine startup still segfaulted
+# during the encoder's dummy/profiling forward pass, at the identical
+# point, on BOTH qwen-asr's old model code AND vLLM's own native Qwen3-ASR
+# implementation — meaning it isn't an application bug, it's vLLM's
+# default FlashAttention-2 kernel (vendored fork, not the PyPI flash-attn
+# package) crashing in the encoder's variable-length attention path on
+# this GPU (RTX 3080 Ti / Ampere, sm_86). vLLM's backend-selection logic
+# treats any GPU with compute capability >= 8.0 as "supported" for that
+# kernel with no per-architecture carve-out, despite the encoder/varlen
+# path being far less tested on Ampere than on the datacenter GPUs it's
+# mainly validated against. Triton's kernels are a fully-supported
+# fallback for the encoder specifically (unlike on the old qwen-asr code
+# path, where forcing the *decoder's* attention backend via
+# VLLM_ATTENTION_BACKEND never touched the encoder at all — a different,
+# unrelated vLLM setting). Set ASR_MM_ENCODER_ATTN_BACKEND= (empty) to let
+# vLLM pick its own default, or to TORCH_SDPA for an even more
+# conservative fallback (plain torch.nn.functional.scaled_dot_product_attention,
+# no custom kernel) if TRITON_ATTN ever turns out not to be enough.
+MM_ENCODER_ATTN_BACKEND = os.environ.get("ASR_MM_ENCODER_ATTN_BACKEND", "TRITON_ATTN")
+
 # Chunk length used for both timestamping and to keep each inference call
 # well under the model's ~20-minute limit. 30s chunks keep memory/latency
 # predictable and give reasonably granular segments for the transcript view.
