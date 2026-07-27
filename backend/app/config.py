@@ -49,25 +49,32 @@ ENFORCE_EAGER = _env_bool("ASR_ENFORCE_EAGER", True)
 # Attention backend for the audio ENCODER specifically — a separate vLLM
 # setting from the decoder LM's attention backend (there's no encoder-only
 # override on our vLLM version's Python API otherwise). Defaults to
-# "TRITON_ATTN". With enforce_eager alone, engine startup still segfaulted
-# during the encoder's dummy/profiling forward pass, at the identical
-# point, on BOTH qwen-asr's old model code AND vLLM's own native Qwen3-ASR
-# implementation — meaning it isn't an application bug, it's vLLM's
-# default FlashAttention-2 kernel (vendored fork, not the PyPI flash-attn
-# package) crashing in the encoder's variable-length attention path on
-# this GPU (RTX 3080 Ti / Ampere, sm_86). vLLM's backend-selection logic
-# treats any GPU with compute capability >= 8.0 as "supported" for that
-# kernel with no per-architecture carve-out, despite the encoder/varlen
-# path being far less tested on Ampere than on the datacenter GPUs it's
-# mainly validated against. Triton's kernels are a fully-supported
-# fallback for the encoder specifically (unlike on the old qwen-asr code
-# path, where forcing the *decoder's* attention backend via
-# VLLM_ATTENTION_BACKEND never touched the encoder at all — a different,
-# unrelated vLLM setting). Set ASR_MM_ENCODER_ATTN_BACKEND= (empty) to let
-# vLLM pick its own default, or to TORCH_SDPA for an even more
-# conservative fallback (plain torch.nn.functional.scaled_dot_product_attention,
-# no custom kernel) if TRITON_ATTN ever turns out not to be enough.
-MM_ENCODER_ATTN_BACKEND = os.environ.get("ASR_MM_ENCODER_ATTN_BACKEND", "TRITON_ATTN")
+# "TORCH_SDPA" (plain torch.nn.functional.scaled_dot_product_attention,
+# no custom kernel at all). History, in order of what was tried and ruled
+# out on this deploy (RTX 3080 Ti / Ampere, sm_86):
+#   1. vLLM's default FlashAttention-2 kernel for the encoder (a vendored
+#      fork, not the PyPI flash-attn package) segfaulted during the
+#      encoder's dummy/profiling forward pass, reproduced on BOTH
+#      qwen-asr's old model code AND vLLM's own native Qwen3-ASR
+#      implementation — ruling out an application bug. vLLM's backend
+#      selection treats any GPU with compute capability >= 8.0 as
+#      "supported" for that kernel with no per-architecture carve-out,
+#      despite the encoder/varlen path being far less tested on Ampere
+#      than on the datacenter GPUs it's mainly validated against.
+#   2. Forcing TRITON_ATTN for the encoder specifically (confirmed active
+#      via the "Using AttentionBackendEnum.TRITON_ATTN for
+#      MMEncoderAttention" log line) still segfaulted at the identical
+#      point — but with a DIFFERENT crash signature: this time inside
+#      PyTorch's own C++ operator dispatcher
+#      (torch::jit::invokeOperatorFromPython / c10::Dispatcher::callBoxed)
+#      while looking up a registered custom op, right as Triton's JIT
+#      kernels were loaded — suggesting a Triton op-registration/dispatch
+#      issue on this host, not an attention-math bug.
+#   3. TORCH_SDPA sidesteps both: no custom CUDA kernel, no Triton JIT,
+#      no custom op dispatch — just PyTorch's built-in fused attention op.
+# Set ASR_MM_ENCODER_ATTN_BACKEND= (empty) to let vLLM pick its own
+# default, or back to TRITON_ATTN/FLASH_ATTN if this is ever revisited.
+MM_ENCODER_ATTN_BACKEND = os.environ.get("ASR_MM_ENCODER_ATTN_BACKEND", "TORCH_SDPA")
 
 # Chunk length used for both timestamping and to keep each inference call
 # well under the model's ~20-minute limit. 30s chunks keep memory/latency
