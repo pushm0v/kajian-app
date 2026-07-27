@@ -81,12 +81,16 @@ MM_ENCODER_ATTN_BACKEND = os.environ.get("ASR_MM_ENCODER_ATTN_BACKEND", "TORCH_S
 # free VRAM after model weights + encoder buffers to fit a 65536-token KV
 # cache (vLLM computed it'd need ~7GiB against ~1.75GiB available) — engine
 # startup fails outright with a clear ValueError rather than serving
-# anything. 16384 comfortably covers a single ~30s audio chunk's encoder
-# tokens plus the 4096-token generation budget (see SamplingParams below)
-# with headroom to spare; nothing in this pipeline needs anywhere near the
+# anything. First tried 16384, but the available-memory calculation is
+# tight enough that vLLM's own reported ceiling (16352) sits BELOW it —
+# 16384 alone still fails the same check by a hair. 8192 leaves real
+# margin below that ceiling (memory available at startup can vary
+# slightly run to run) while still comfortably covering a single ~30s
+# audio chunk's encoder tokens plus the 4096-token generation budget (see
+# SamplingParams below); nothing in this pipeline needs anywhere near the
 # full 65536. Raise ASR_GPU_MEMORY_UTILIZATION instead of this if more
 # headroom is ever needed and VRAM allows it.
-MAX_MODEL_LEN = _env_int("ASR_MAX_MODEL_LEN", 16384)
+MAX_MODEL_LEN = _env_int("ASR_MAX_MODEL_LEN", 8192)
 
 # Chunk length used for both timestamping and to keep each inference call
 # well under the model's ~20-minute limit. 30s chunks keep memory/latency
