@@ -76,6 +76,18 @@ ENFORCE_EAGER = _env_bool("ASR_ENFORCE_EAGER", True)
 # default, or back to TRITON_ATTN/FLASH_ATTN if this is ever revisited.
 MM_ENCODER_ATTN_BACKEND = os.environ.get("ASR_MM_ENCODER_ATTN_BACKEND", "TORCH_SDPA")
 
+# Caps vLLM's KV cache sizing to this many tokens instead of the model's
+# full max_position_embeddings (65536). On a 12GB card there isn't enough
+# free VRAM after model weights + encoder buffers to fit a 65536-token KV
+# cache (vLLM computed it'd need ~7GiB against ~1.75GiB available) — engine
+# startup fails outright with a clear ValueError rather than serving
+# anything. 16384 comfortably covers a single ~30s audio chunk's encoder
+# tokens plus the 4096-token generation budget (see SamplingParams below)
+# with headroom to spare; nothing in this pipeline needs anywhere near the
+# full 65536. Raise ASR_GPU_MEMORY_UTILIZATION instead of this if more
+# headroom is ever needed and VRAM allows it.
+MAX_MODEL_LEN = _env_int("ASR_MAX_MODEL_LEN", 16384)
+
 # Chunk length used for both timestamping and to keep each inference call
 # well under the model's ~20-minute limit. 30s chunks keep memory/latency
 # predictable and give reasonably granular segments for the transcript view.
