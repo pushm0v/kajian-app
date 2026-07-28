@@ -86,3 +86,14 @@ SPEAKER_EMBEDDING_MODEL_PATH = os.environ.get(
 # main.py's /embed-speaker `provider` form field, used by the
 # dev-console's CPU/GPU toggle) without restarting this container.
 SPEAKER_EMBEDDING_PROVIDER = os.environ.get("WHISPER_SPEAKER_EMBEDDING_PROVIDER", "cpu")
+
+# CPU threads sherpa-onnx's ONNX Runtime session uses for the embedding
+# extractor when provider="cpu" (ignored for provider="cuda"). Was
+# hardcoded to 1 — on a 4-CPU host that left 3 cores idle during a
+# measured ~93s CPU embedding extraction for a 44min recording. Defaults
+# to all available cores: this is a single-request-at-a-time
+# post-processing step (behind SpeakerEmbedder's own lock), not something
+# serving concurrent traffic that needs headroom reserved.
+SPEAKER_EMBEDDING_NUM_THREADS = _env_int(
+    "WHISPER_SPEAKER_EMBEDDING_NUM_THREADS", os.cpu_count() or 1,
+)

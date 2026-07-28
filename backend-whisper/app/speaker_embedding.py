@@ -68,8 +68,8 @@ class SpeakerEmbedder:
             return
 
         logger.info(
-            "Loading speaker embedding model from %s (provider=%s) ...",
-            config.SPEAKER_EMBEDDING_MODEL_PATH, provider,
+            "Loading speaker embedding model from %s (provider=%s, num_threads=%d) ...",
+            config.SPEAKER_EMBEDDING_MODEL_PATH, provider, config.SPEAKER_EMBEDDING_NUM_THREADS,
         )
         # Imported lazily so config-only tooling doesn't need sherpa_onnx
         # installed (matches asr_model.py's lazy faster_whisper import).
@@ -77,7 +77,7 @@ class SpeakerEmbedder:
 
         embedder_config = sherpa_onnx.SpeakerEmbeddingExtractorConfig(
             model=config.SPEAKER_EMBEDDING_MODEL_PATH,
-            num_threads=1,
+            num_threads=config.SPEAKER_EMBEDDING_NUM_THREADS,
             provider=provider,
         )
         if not embedder_config.validate():
