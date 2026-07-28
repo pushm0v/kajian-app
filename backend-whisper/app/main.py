@@ -131,15 +131,22 @@ async def transcribe(
 @app.post("/embed-speaker")
 async def embed_speaker(
     audio: UploadFile = File(...),
+    provider: str = Form(default=""),
     _auth: None = Depends(_check_auth),
 ) -> dict:
     """Extracts a 192-dim speaker embedding from an uploaded recording, for
     backend-core's voice-fingerprint matching (see its
-    services/speaker_matching.py). Runs on this container's GPU (device
-    1) rather than the Qwen worker's — see speaker_embedding.py's module
-    docstring for why. A separate endpoint from /transcribe — different
-    model, different failure modes — kept independently callable rather
-    than piggybacked onto the transcription response.
+    services/speaker_matching.py). Lives on this container (not the Qwen
+    worker's) — see speaker_embedding.py's module docstring for why.
+    A separate endpoint from /transcribe — different model, different
+    failure modes — kept independently callable rather than piggybacked
+    onto the transcription response.
+
+    `provider` ("cpu" or "cuda") optionally overrides
+    config.SPEAKER_EMBEDDING_PROVIDER for this call — used by the
+    dev-console's CPU/GPU toggle to switch without restarting this
+    container. Reloads the extractor if it differs from what's currently
+    loaded (a few seconds of one-time cost, see SpeakerEmbedder.load()).
     """
     if not embedder.is_loaded:
         raise HTTPException(status_code=503, detail="Speaker embedding model is still loading, retry shortly")
@@ -169,14 +176,19 @@ async def embed_speaker(
         if waveform.size == 0:
             raise HTTPException(status_code=422, detail="No audio content decoded from upload")
         embedding = await anyio.to_thread.run_sync(
-            embedder.embed, waveform, config.TARGET_SAMPLE_RATE,
+            embedder.embed, waveform, config.TARGET_SAMPLE_RATE, provider or None,
         )
         processing_ms = round((time.monotonic() - started) * 1000)
         logger.info(
-            "Speaker embedding extracted in %dms (dim=%d, audio_samples=%d)",
-            processing_ms, len(embedding), waveform.size,
+            "Speaker embedding extracted in %dms (dim=%d, audio_samples=%d, provider=%s)",
+            processing_ms, len(embedding), waveform.size, embedder.provider,
         )
-        return {"embedding": embedding, "dim": len(embedding), "processing_ms": processing_ms}
+        return {
+            "embedding": embedding,
+            "dim": len(embedding),
+            "processing_ms": processing_ms,
+            "provider": embedder.provider,
+        }
     except HTTPException:
         raise
     except Exception as e:  # noqa: BLE001 - convert to the app's expected error shape

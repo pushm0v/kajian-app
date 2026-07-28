@@ -208,6 +208,13 @@
           <option value="whisper">whisper</option>
         </select>
       </div>
+      <div>
+        <label for="speakerEmbeddingProvider">Speaker embedding runs on</label>
+        <select id="speakerEmbeddingProvider">
+          <option value="cpu" selected>CPU (default)</option>
+          <option value="cuda">GPU (cuda)</option>
+        </select>
+      </div>
     </div>
     <div class="actions">
       <button id="uploadAndTranscribe">Upload + transcribe</button>
@@ -516,10 +523,11 @@ $("uploadAndTranscribe").addEventListener("click", async () => {
     log("Confirming upload with backend-core…");
     await api("POST", `/sessions/${currentSessionId}/audio-confirm`);
 
-    log(`Running ASR proxy (model=${$("asrModel").value})… this can take a while`);
+    const embeddingProvider = $("speakerEmbeddingProvider").value;
+    log(`Running ASR proxy (model=${$("asrModel").value}, speaker embedding on ${embeddingProvider})… this can take a while`);
     const session = await api(
       "POST", `/sessions/${currentSessionId}/transcribe`,
-      { model: $("asrModel").value },
+      { model: $("asrModel").value, speakerEmbeddingProvider: embeddingProvider },
     );
     $("transcriptOut").textContent = JSON.stringify(session.transcript, null, 2);
     log(`Transcribe complete: ${session.transcript.length} segment(s)`, "ok");

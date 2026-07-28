@@ -84,17 +84,22 @@ async def transcribe(model: AsrModel, audio_path: str, locale_id: str) -> dict:
     return result
 
 
-async def embed_speaker(audio_path: str) -> list[float]:
+async def embed_speaker(audio_path: str, provider: str = "") -> list[float]:
     """Sends `audio_path` to the Whisper worker's POST /embed-speaker and
     returns the extracted speaker embedding (a 192-dim float vector — see
     backend-whisper/app/speaker_embedding.py). Only the Whisper worker
-    (backend-whisper/) has this endpoint — it runs on GPU there, since
-    that container's device has real VRAM headroom and a CUDA/cuDNN stack
-    that matches sherpa-onnx's GPU wheel, unlike the Qwen worker's vLLM-
-    committed GPU (see speaker_embedding.py's module docstring for the
-    full reasoning). Speaker embedding isn't tied to which ASR model
+    (backend-whisper/) has this endpoint — its base image's CUDA/cuDNN
+    stack matches sherpa-onnx's GPU wheel, unlike the Qwen worker's newer
+    CUDA/torch stack (see speaker_embedding.py's module docstring for the
+    full reasoning) — though in practice VRAM headroom on that GPU turned
+    out to be the harder constraint, which is why `provider` defaults to
+    empty (that worker's own config default, currently "cpu") rather than
+    always requesting GPU. Speaker embedding isn't tied to which ASR model
     transcribed the session, so it's not routed through AsrModel/
     _worker_config the way transcribe() is.
+
+    `provider` ("cpu"/"cuda"/"") is forwarded as-is to the worker, which
+    interprets "" as "use my own configured default."
     """
     base_url, token = config.WHISPER_BACKEND_URL, config.WHISPER_BACKEND_TOKEN
     if not base_url:
@@ -104,7 +109,8 @@ async def embed_speaker(audio_path: str) -> list[float]:
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     audio_bytes = os.path.getsize(audio_path)
     logger.info(
-        "ASR proxy: POST %s/embed-speaker (audio_bytes=%d) ...", base_url, audio_bytes,
+        "ASR proxy: POST %s/embed-speaker (audio_bytes=%d, provider=%s) ...",
+        base_url, audio_bytes, provider or "(worker default)",
     )
     started = time.monotonic()
 
@@ -116,6 +122,7 @@ async def embed_speaker(audio_path: str) -> list[float]:
                 response = await client.post(
                     f"{base_url}/embed-speaker",
                     headers=headers,
+                    data={"provider": provider},
                     files={"audio": (audio_path.rsplit("/", 1)[-1], f, "audio/m4a")},
                 )
         response.raise_for_status()
@@ -129,7 +136,7 @@ async def embed_speaker(audio_path: str) -> list[float]:
     elapsed = time.monotonic() - started
     result = response.json()
     logger.info(
-        "ASR proxy: %s/embed-speaker completed in %.1fs (dim=%d)",
-        base_url, elapsed, result.get("dim", -1),
+        "ASR proxy: %s/embed-speaker completed in %.1fs (dim=%d, provider=%s)",
+        base_url, elapsed, result.get("dim", -1), result.get("provider"),
     )
     return result["embedding"]

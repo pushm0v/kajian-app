@@ -52,14 +52,13 @@ TARGET_SAMPLE_RATE = 16_000
 #
 # Originally shipped on the Qwen worker (../backend/) as a CPU-only step,
 # since that container's GPU (device 0) is already fully committed to
-# vLLM's upfront memory reservation. Moved here instead: this container
-# (device 1) doesn't pre-reserve VRAM the way vLLM does, so real headroom
-# exists after Whisper's own weights load (see DEVICE/COMPUTE_TYPE above),
-# and — just as importantly — this image's base is already CUDA 12/cuDNN 9
-# (matching ctranslate2's own requirement), which happens to be exactly
-# what sherpa-onnx's GPU wheel targets too. Running it on device 0 instead
-# would risk two independently-bundled CUDA/cuDNN runtimes (sherpa-onnx's
-# vs. vLLM/torch's newer CUDA 13.2-era stack) conflicting in one process.
+# vLLM's upfront memory reservation. Moved here instead: this image's
+# base is already CUDA 12/cuDNN 9 (matching ctranslate2's own
+# requirement), which is exactly what sherpa-onnx's GPU wheel targets —
+# device 0's newer CUDA 13.2/torch 2.10 stack would risk two
+# independently-bundled CUDA/cuDNN runtimes conflicting in one process.
+# That reasoning holds; the *memory-headroom* assumption did not — see
+# SPEAKER_EMBEDDING_PROVIDER below.
 #
 # Model: 3D-Speaker's CAM++, bilingual (zh+en) checkpoint, baked into the
 # image at build time (see Dockerfile) — small (~27MB), static, versioned.
@@ -74,9 +73,16 @@ SPEAKER_EMBEDDING_MODEL_PATH = os.environ.get(
     "/srv/models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx",
 )
 
-# "cuda" or "cpu" — see this section's module-level comment for why cuda
-# is safe here specifically (not a general recommendation; the Qwen
-# worker's own attempt at this stayed CPU-only for good reason). Requires
-# the sherpa-onnx GPU wheel (`sherpa-onnx==X.Y.Z+cuda12.cudnnN`), NOT the
-# standard PyPI `sherpa-onnx` package — see Dockerfile/requirements.txt.
-SPEAKER_EMBEDDING_PROVIDER = os.environ.get("WHISPER_SPEAKER_EMBEDDING_PROVIDER", "cuda")
+# "cpu" (default) or "cuda". Defaults to cpu: in practice, Whisper
+# large-v3 at float16 was measured (nvidia-smi) using ~11.6GB of this
+# card's 12GB on its own, leaving too little headroom for sherpa-onnx's
+# CUDA execution provider — a small (~27MB) model still needed ~2.75GB
+# for a single Conv node's workspace (ONNX Runtime's CUDA EP arena
+# allocator/cuDNN algorithm search over-allocates for small models by
+# default; this is a known, tunable pattern, not fixed yet here). "cuda"
+# requires the sherpa-onnx GPU wheel (`sherpa-onnx==X.Y.Z+cuda12.cudnnN`),
+# NOT the standard PyPI `sherpa-onnx` package — see
+# Dockerfile/requirements.txt. Can also be overridden per-request (see
+# main.py's /embed-speaker `provider` form field, used by the
+# dev-console's CPU/GPU toggle) without restarting this container.
+SPEAKER_EMBEDDING_PROVIDER = os.environ.get("WHISPER_SPEAKER_EMBEDDING_PROVIDER", "cpu")
