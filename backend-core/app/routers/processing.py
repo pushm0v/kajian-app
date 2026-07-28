@@ -38,6 +38,7 @@ import os
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from .. import config, schemas
 from ..auth import current_user
@@ -118,10 +119,15 @@ async def _run_transcription(
     (already closed by the time this runs).
     """
     async with SessionLocal() as db:
+        # selectinload(transcript) is required, not optional — async
+        # SQLAlchemy has no implicit lazy-loading (there's no greenlet
+        # context to do the load in outside an awaited call), so
+        # `session.transcript.clear()` below would otherwise raise
+        # MissingGreenlet the first time this relationship is touched.
         result = await db.execute(
-            select(KajianSession).where(
-                KajianSession.id == session_id, KajianSession.user_id == user_id,
-            )
+            select(KajianSession)
+            .options(selectinload(KajianSession.transcript))
+            .where(KajianSession.id == session_id, KajianSession.user_id == user_id)
         )
         session = result.scalar_one_or_none()
         if session is None:
@@ -240,10 +246,14 @@ async def _run_summarization(session_id: str, user_id, model: str | None) -> Non
     import datetime
 
     async with SessionLocal() as db:
+        # selectinload both transcript (iterated below) and note (read/
+        # delete/reassigned below) — same MissingGreenlet reasoning as
+        # _run_transcription above: async SQLAlchemy has no implicit
+        # lazy-loading.
         result = await db.execute(
-            select(KajianSession).where(
-                KajianSession.id == session_id, KajianSession.user_id == user_id,
-            )
+            select(KajianSession)
+            .options(selectinload(KajianSession.transcript), selectinload(KajianSession.note))
+            .where(KajianSession.id == session_id, KajianSession.user_id == user_id)
         )
         session = result.scalar_one_or_none()
         if session is None:
