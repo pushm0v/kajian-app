@@ -56,12 +56,26 @@ class KajianNoteOut(BaseModel):
     )
 
 
+class SuggestedSpeakerOut(BaseModel):
+    """A voice-fingerprint match, surfaced for the user to confirm or
+    reject — never auto-assigned. See services/speaker_matching.py."""
+
+    speakerId: str
+    name: str
+    score: float
+
+
 class KajianSessionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
     title: str
     speaker: str | None = None
+    # Links to a confirmed Speaker profile, once one exists — null until
+    # the user confirms a suggestion (or an exact-name auto-match fires).
+    speakerId: Annotated[str | None, BeforeValidator(lambda v: str(v) if v is not None else None)] = Field(
+        default=None, validation_alias="speaker_id", serialization_alias="speakerId",
+    )
     location: str | None = None
     createdAt: datetime = Field(validation_alias="created_at", serialization_alias="createdAt")
     durationMs: int = Field(validation_alias="duration_ms", serialization_alias="durationMs")
@@ -77,6 +91,11 @@ class KajianSessionOut(BaseModel):
     # by _to_out() after model_validate(), rather than sourced via an alias,
     # since it's derived (audio_object_key is not None), not a real column.
     hasAudio: bool = False
+    # Same pattern as hasAudio — not an ORM column, only ever set (by
+    # transcribe_session, see routers/processing.py) right after a fresh
+    # transcription's embedding comparison runs. Absent/null everywhere
+    # else, including on every other route that returns a KajianSessionOut.
+    suggestedSpeaker: SuggestedSpeakerOut | None = None
 
 
 class SessionCreateIn(BaseModel):
@@ -140,3 +159,22 @@ class TranscribeRequestIn(BaseModel):
 
 class SummarizeRequestIn(BaseModel):
     model: str | None = None
+
+
+class SpeakerOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: _IdStr
+    name: str
+    embeddingCount: int = Field(validation_alias="embedding_count", serialization_alias="embeddingCount")
+    createdAt: datetime = Field(validation_alias="created_at", serialization_alias="createdAt")
+
+
+class SpeakerConfirmIn(BaseModel):
+    # Exactly one of these — confirm an existing suggested/known speaker by
+    # id, or create a brand-new profile from this session's embedding under
+    # a fresh name. Enforced in the route handler, not here (a Pydantic
+    # validator would need to reject on missing-both AND both-present,
+    # which reads less clearly than one explicit if/elif in the handler).
+    speakerId: str | None = None
+    newSpeakerName: str | None = None

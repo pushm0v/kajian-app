@@ -15,20 +15,69 @@ import logging
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import config, schemas
 from ..auth import current_user
 from ..db import get_db
 from ..models.kajian_note import KajianNote, ScriptureReference
+from ..models.speaker import Speaker
 from ..models.transcript_segment import TranscriptSegment
 from ..models.user import User
 from ..services import asr_proxy, notes, storage
+from ..services.speaker_matching import find_best_match, update_centroid
 from .sessions import _get_owned_session, _to_out
 
 logger = logging.getLogger("kajian_core")
 
 router = APIRouter(prefix="/sessions", tags=["processing"])
+
+
+async def _match_speaker(
+    db: AsyncSession, session, local_path: str,
+) -> schemas.SuggestedSpeakerOut | None:
+    """Extracts a speaker embedding for `session` and either auto-confirms
+    it (exact, case-insensitive match against session.speaker's typed
+    name) or stashes it as session.pending_embedding and returns a
+    suggestion for the caller to surface — never both, never neither.
+    Failures here are logged and swallowed: a speaker-embedding problem
+    should never fail the transcription response it's riding along with.
+    """
+    try:
+        embedding = await asr_proxy.embed_speaker(local_path)
+    except Exception:  # noqa: BLE001 - best-effort; transcription already succeeded
+        logger.exception("transcribe_session %s: speaker embedding failed, skipping", session.id)
+        return None
+
+    result = await db.execute(select(Speaker))
+    candidates = list(result.scalars().all())
+
+    if session.speaker:
+        exact = next(
+            (s for s in candidates if s.name.strip().lower() == session.speaker.strip().lower()),
+            None,
+        )
+        if exact is not None:
+            update_centroid(exact, embedding)
+            session.speaker_id = exact.id
+            logger.info(
+                "transcribe_session %s: auto-confirmed exact-name match speaker=%s (embedding_count=%d)",
+                session.id, exact.id, exact.embedding_count,
+            )
+            return None
+
+    match = find_best_match(embedding, candidates)
+    session.pending_embedding = embedding
+    if match is None:
+        logger.info("transcribe_session %s: no speaker match above threshold", session.id)
+        return None
+
+    speaker, score = match
+    logger.info(
+        "transcribe_session %s: suggesting speaker=%s (score=%.3f)", session.id, speaker.id, score,
+    )
+    return schemas.SuggestedSpeakerOut(speakerId=str(speaker.id), name=speaker.name, score=round(score, 3))
 
 
 @router.post("/{session_id}/transcribe", response_model=schemas.KajianSessionOut)
@@ -90,6 +139,14 @@ async def transcribe_session(
                 )
             )
         session.status = session.status.__class__.transcribed
+
+        # Runs against local_path while it still exists (cleaned up in the
+        # finally block below) — separate try/except inside _match_speaker
+        # so a speaker-embedding failure never fails the transcription
+        # response it's riding along with. See that function's docstring
+        # for the auto-confirm vs. suggest-only split.
+        suggested_speaker = await _match_speaker(db, session, local_path)
+
         await db.commit()
         logger.info(
             "transcribe_session %s: done, %d segment(s) persisted",
@@ -99,7 +156,9 @@ async def transcribe_session(
         if os.path.exists(local_path):
             os.remove(local_path)
 
-    return _to_out(await _get_owned_session(db, user, session_id))
+    out = _to_out(await _get_owned_session(db, user, session_id))
+    out.suggestedSpeaker = suggested_speaker
+    return out
 
 
 @router.post("/{session_id}/summarize", response_model=schemas.KajianSessionOut)
