@@ -43,6 +43,23 @@ services:
       # local/non-compose runs.
       - DATABASE_URL=postgresql+asyncpg://kajian:kajian@kajian-core-db:5432/kajian
       - S3_ENDPOINT_URL=http://kajian-core-minio:9000
+    # QWEN_BACKEND_URL/WHISPER_BACKEND_URL (.env) point at Tailscale
+    # MagicDNS hostnames (*.ts.net) for the ASR workers. Docker containers
+    # get their own network namespace/resolv.conf, which does NOT inherit
+    # the host's DNS setup even when the host itself is on the tailnet and
+    # resolves those names fine — confirmed via `docker exec ... getent
+    # hosts <name>` failing with "Name or service not known" while the
+    # same lookup from the host succeeded. Tailscale runs its own MagicDNS
+    # resolver on the host at this fixed IP; pointing the container at it
+    # directly fixes *.ts.net resolution without installing Tailscale
+    # inside the container itself. MagicDNS normally also forwards
+    # non-ts.net lookups (this container also needs api.anthropic.com for
+    # notes.py), but that depends on the tailnet's admin-console DNS
+    # settings — 1.1.1.1 is a fallback in case "override local DNS" isn't
+    # enabled there. Docker/glibc tries resolvers in list order.
+    dns:
+      - 100.100.100.100
+      - 1.1.1.1
     depends_on:
       kajian-core-db:
         condition: service_healthy
