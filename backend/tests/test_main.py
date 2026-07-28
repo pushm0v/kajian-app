@@ -11,7 +11,6 @@ from fastapi.testclient import TestClient
 
 from app import config
 from app.asr_model import model as real_model
-from app.speaker_embedding import embedder as real_embedder
 
 
 class _FakeStreamState:
@@ -48,17 +47,6 @@ class _FakeModel:
         return "halo dunia (final)"
 
 
-class _FakeEmbedder:
-    """Drop-in replacement for SpeakerEmbedder that returns a canned
-    embedding without touching sherpa-onnx/ONNX Runtime at all."""
-
-    is_loaded = True
-    dim = 192
-
-    def embed(self, waveform, sample_rate):
-        return [0.1] * self.dim
-
-
 @pytest.fixture()
 def client(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "WORK_DIR", str(tmp_path))
@@ -71,11 +59,6 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(real_model, "new_streaming_state", fake.new_streaming_state)
     monkeypatch.setattr(real_model, "streaming_transcribe", fake.streaming_transcribe)
     monkeypatch.setattr(real_model, "finish_streaming", fake.finish_streaming)
-
-    fake_embedder = _FakeEmbedder()
-    monkeypatch.setattr(real_embedder, "_extractor", object())  # is_loaded truthy
-    monkeypatch.setattr(real_embedder, "load", lambda: None)
-    monkeypatch.setattr(real_embedder, "embed", fake_embedder.embed)
 
     from app.main import app
 
@@ -129,27 +112,6 @@ def test_transcribe_requires_ffmpeg_and_returns_segments(monkeypatch, client):
     assert body["audio_seconds"] == 30.0
     assert body["model"] == config.MODEL_ID
     assert "device" in body
-
-
-def test_embed_speaker_returns_embedding(monkeypatch, client):
-    # Bypass real ffmpeg decoding, same as the transcribe test above — only
-    # asserting the endpoint wires upload -> decode -> embed -> response.
-    def fake_decode_to_mono_16k(audio_path):
-        assert os.path.exists(audio_path)
-        import numpy as np
-        return np.zeros(16_000, dtype=np.float32)
-
-    monkeypatch.setattr("app.main.decode_to_mono_16k", fake_decode_to_mono_16k)
-
-    resp = client.post(
-        "/embed-speaker",
-        files={"audio": ("kajian.wav", _make_wav_bytes(1.0), "audio/wav")},
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["dim"] == 192
-    assert len(body["embedding"]) == 192
-    assert isinstance(body["processing_ms"], int) and body["processing_ms"] >= 0
 
 
 def test_transcribe_rejects_oversized_upload(monkeypatch, client):

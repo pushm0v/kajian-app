@@ -1,11 +1,21 @@
 """Speaker embedding extraction via sherpa-onnx's CAM++ model — a small
-(192-dim), CPU-only voice fingerprint used to suggest matching speakers
-across sessions. See config.py's SPEAKER_EMBEDDING_MODEL_PATH comment for
-why this model and why CPU-only.
+(192-dim) voice fingerprint used to suggest matching speakers across
+sessions. See config.py's SPEAKER_EMBEDDING_MODEL_PATH comment for why
+this model.
 
-Deliberately separate from asr_model.py: different runtime (ONNX Runtime,
-not vLLM/PyTorch), different device (CPU, not GPU), different lifecycle
-(stateless per-call, no KV cache/lock contention with ASR inference).
+Runs on GPU (this container's device 1), not the Qwen worker's device 0
+where this originally shipped: device 0 runs vLLM, which reserves VRAM
+upfront and left almost no headroom (max_model_len had to be capped just
+to fit the ASR model itself). faster-whisper (this container) only holds
+what its own model weights need — no upfront reservation — leaving real
+headroom, and critically this container's base image is already CUDA
+12/cuDNN 9 (matching what sherpa-onnx's GPU wheel targets), unlike device
+0's CUDA 13.2/torch 2.10 stack, which would have risked a cuDNN version
+conflict between two independently-bundled CUDA runtimes in one process.
+
+Deliberately separate from asr_model.py: different model, different
+lifecycle (stateless per-call, no lock contention with Whisper inference
+beyond sharing the same GPU).
 
 API confirmed against sherpa-onnx 1.13.4's own python-api-examples/
 speaker-identification.py and speaker-embedding-manager.cc:
@@ -28,12 +38,13 @@ import numpy as np
 
 from . import config
 
-logger = logging.getLogger("kajian_asr")
+logger = logging.getLogger("kajian_whisper")
 
 
 class SpeakerEmbedder:
     """Thread-safe wrapper around a single loaded sherpa-onnx speaker
-    embedding extractor. Mirrors AsrModel's load()/lock/singleton shape."""
+    embedding extractor. Mirrors WhisperModelWrapper's load()/lock/
+    singleton shape (see asr_model.py)."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -43,22 +54,23 @@ class SpeakerEmbedder:
         if self._extractor is not None:
             return
         logger.info(
-            "Loading speaker embedding model from %s ...",
-            config.SPEAKER_EMBEDDING_MODEL_PATH,
+            "Loading speaker embedding model from %s (provider=%s) ...",
+            config.SPEAKER_EMBEDDING_MODEL_PATH, config.SPEAKER_EMBEDDING_PROVIDER,
         )
         # Imported lazily so config-only tooling doesn't need sherpa_onnx
-        # installed (matches asr_model.py's lazy vllm/transformers imports).
+        # installed (matches asr_model.py's lazy faster_whisper import).
         import sherpa_onnx  # noqa: PLC0415
 
         embedder_config = sherpa_onnx.SpeakerEmbeddingExtractorConfig(
             model=config.SPEAKER_EMBEDDING_MODEL_PATH,
             num_threads=1,
-            provider="cpu",
+            provider=config.SPEAKER_EMBEDDING_PROVIDER,
         )
         if not embedder_config.validate():
             raise RuntimeError(
                 f"Invalid speaker embedding config: {embedder_config} "
-                f"(check SPEAKER_EMBEDDING_MODEL_PATH exists)"
+                f"(check SPEAKER_EMBEDDING_MODEL_PATH exists and the sherpa-onnx "
+                f"GPU wheel is installed if provider=cuda)"
             )
         self._extractor = sherpa_onnx.SpeakerEmbeddingExtractor(embedder_config)
         logger.info(

@@ -1,9 +1,20 @@
 fastapi>=0.115
 uvicorn[standard]>=0.32
 python-multipart>=0.0.12
+anyio>=4.0
 # faster-whisper's own requirements.txt pins ctranslate2>=4.0,<5, which
 # targets CUDA 12 + cuDNN 9 — matches the Dockerfile's base image. If you
 # change the base image's CUDA/cuDNN version, check
 # https://github.com/SYSTRAN/faster-whisper#gpu for the compatible
 # ctranslate2 version range first.
 faster-whisper>=1.0
+# GPU-enabled sherpa-onnx (speaker embedding, see app/speaker_embedding.py)
+# — a DIFFERENT wheel from the standard PyPI `sherpa-onnx` package (same
+# relationship as onnxruntime vs onnxruntime-gpu), hosted on a custom
+# index rather than PyPI proper. Its CUDA 12/cuDNN 9 target matches this
+# image's base (see Dockerfile) — this is also why it's here and not on
+# the Qwen worker (../backend/), whose CUDA 13.2/torch 2.10 stack would
+# risk a cuDNN version conflict between two independently-bundled CUDA
+# runtimes in one process.
+--find-links https://k2-fsa.github.io/sherpa/onnx/cuda.html
+sherpa-onnx==1.13.4+cuda12.cudnn9

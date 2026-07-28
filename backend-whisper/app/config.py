@@ -47,3 +47,36 @@ WORK_DIR = os.environ.get("WHISPER_WORK_DIR", "/tmp/kajian-whisper")
 
 # Sample rate faster-whisper/ffmpeg decode to.
 TARGET_SAMPLE_RATE = 16_000
+
+# --- Speaker embedding (/embed-speaker) -------------------------------------
+#
+# Originally shipped on the Qwen worker (../backend/) as a CPU-only step,
+# since that container's GPU (device 0) is already fully committed to
+# vLLM's upfront memory reservation. Moved here instead: this container
+# (device 1) doesn't pre-reserve VRAM the way vLLM does, so real headroom
+# exists after Whisper's own weights load (see DEVICE/COMPUTE_TYPE above),
+# and — just as importantly — this image's base is already CUDA 12/cuDNN 9
+# (matching ctranslate2's own requirement), which happens to be exactly
+# what sherpa-onnx's GPU wheel targets too. Running it on device 0 instead
+# would risk two independently-bundled CUDA/cuDNN runtimes (sherpa-onnx's
+# vs. vLLM/torch's newer CUDA 13.2-era stack) conflicting in one process.
+#
+# Model: 3D-Speaker's CAM++, bilingual (zh+en) checkpoint, baked into the
+# image at build time (see Dockerfile) — small (~27MB), static, versioned.
+# No Indonesian-specific speaker-embedding checkpoint exists publicly;
+# this is the best available proxy — it's the only option in sherpa-onnx's
+# official model zoo explicitly trained across languages rather than on
+# monolingual VoxCeleb-English, which matters given SVeritas benchmark
+# data showing 8-23 point EER degradation on cross-language trials for
+# English-only models. 192-dim output.
+SPEAKER_EMBEDDING_MODEL_PATH = os.environ.get(
+    "WHISPER_SPEAKER_EMBEDDING_MODEL_PATH",
+    "/srv/models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx",
+)
+
+# "cuda" or "cpu" — see this section's module-level comment for why cuda
+# is safe here specifically (not a general recommendation; the Qwen
+# worker's own attempt at this stayed CPU-only for good reason). Requires
+# the sherpa-onnx GPU wheel (`sherpa-onnx==X.Y.Z+cuda12.cudnnN`), NOT the
+# standard PyPI `sherpa-onnx` package — see Dockerfile/requirements.txt.
+SPEAKER_EMBEDDING_PROVIDER = os.environ.get("WHISPER_SPEAKER_EMBEDDING_PROVIDER", "cuda")

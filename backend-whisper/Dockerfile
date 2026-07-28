@@ -21,10 +21,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-# Note: no system ffmpeg package needed — faster-whisper decodes audio via
-# PyAV, which bundles its own FFmpeg libraries.
+# Note: faster-whisper itself decodes audio via PyAV (bundles its own
+# FFmpeg libraries, no system ffmpeg needed for /transcribe). ffmpeg IS
+# needed here for /embed-speaker's decode step (see app/audio.py) — that
+# path was ported as-is from ../backend/, which does shell out to it.
+# curl is needed once, below, to fetch the speaker embedding model file.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3.11 python3.11-venv python3-pip \
+        python3.11 python3.11-venv python3-pip ffmpeg curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv
@@ -32,6 +35,14 @@ WORKDIR /srv
 COPY requirements.txt .
 RUN python3.11 -m pip install --upgrade pip \
     && python3.11 -m pip install -r requirements.txt
+
+# Speaker embedding model (sherpa-onnx's CAM++ bilingual checkpoint, see
+# app/config.py's SPEAKER_EMBEDDING_MODEL_PATH comment for why this one
+# lives here rather than on the Qwen worker). Baked into the image rather
+# than downloaded at runtime — small (~27MB), static, versioned.
+RUN mkdir -p /srv/models && \
+    curl -fL -o /srv/models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx \
+        https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx
 
 COPY app ./app
 
