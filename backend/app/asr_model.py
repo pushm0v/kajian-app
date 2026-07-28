@@ -298,14 +298,57 @@ class AsrModel:
         if self._model is None:
             raise RuntimeError("AsrModel.load() must be called before use")
 
-        prompt = self._build_prompt(language)
-        request = {"prompt": prompt, "multi_modal_data": {"audio": [audio.astype(np.float32, copy=False)]}}
-
-        with self._lock:
-            [output] = self._model.generate([request], sampling_params=self._sampling_params, use_tqdm=False)
-        raw_text = output.outputs[0].text
-        _, text = _parse_asr_output(raw_text, user_language=language)
+        [text] = self.transcribe_chunks([audio], sample_rate, language)
         return text
+
+    def transcribe_chunks(
+        self,
+        audios: list[np.ndarray],
+        sample_rate: int,
+        language: str | None,
+    ) -> list[str]:
+        """Transcribes multiple bounded audio clips, batching several per
+        vLLM generate() call (config.TRANSCRIBE_BATCH_SIZE at a time).
+
+        Submitting chunks together lets vLLM's continuous batching run them
+        concurrently on the GPU instead of one full round-trip (prompt
+        build + audio encoder forward pass + LM prefill/decode) per chunk —
+        for a long recording split into many 30s chunks, that's a large
+        share of avoidable overhead on top of each chunk's actual inference
+        time. Chunks are independent (no shared prompt/KV state), so
+        batching changes nothing about correctness. Grouped rather than
+        submitted all at once since every request in a batch holds its own
+        KV cache slot concurrently, and this backend is already tight on
+        VRAM (see config.MAX_MODEL_LEN).
+
+        Returns one string per input audio, same order, "" for silence.
+        """
+        if self._model is None:
+            raise RuntimeError("AsrModel.load() must be called before use")
+        if not audios:
+            return []
+
+        prompt = self._build_prompt(language)
+        texts: list[str] = []
+        batch_size = max(1, config.TRANSCRIBE_BATCH_SIZE)
+        num_batches = (len(audios) + batch_size - 1) // batch_size
+        for i in range(0, len(audios), batch_size):
+            batch = audios[i:i + batch_size]
+            logger.info(
+                "transcribe_chunks: batch %d/%d (%d chunk(s)) ...",
+                i // batch_size + 1, num_batches, len(batch),
+            )
+            requests = [
+                {"prompt": prompt, "multi_modal_data": {"audio": [audio.astype(np.float32, copy=False)]}}
+                for audio in batch
+            ]
+            with self._lock:
+                outputs = self._model.generate(requests, sampling_params=self._sampling_params, use_tqdm=False)
+            for output in outputs:
+                raw_text = output.outputs[0].text
+                _, text = _parse_asr_output(raw_text, user_language=language)
+                texts.append(text)
+        return texts
 
     def new_streaming_state(self, language: str | None = None) -> StreamingState:
         """Starts a new incremental-decoding session for one live connection.

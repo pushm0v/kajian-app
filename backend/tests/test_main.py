@@ -32,6 +32,9 @@ class _FakeModel:
     def transcribe_chunk(self, audio, sample_rate, language):
         return "halo dunia" if len(audio) > 0 else ""
 
+    def transcribe_chunks(self, audios, sample_rate, language):
+        return [self.transcribe_chunk(a, sample_rate, language) for a in audios]
+
     def new_streaming_state(self, language=None):
         return _FakeStreamState()
 

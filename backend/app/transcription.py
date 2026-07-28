@@ -40,13 +40,14 @@ def transcribe_file(model: AsrModel, audio_path: str, locale_id: str | None) -> 
         len(chunks), language or "auto", samples.size / config.TARGET_SAMPLE_RATE,
     )
 
+    texts = model.transcribe_chunks(
+        [chunk_audio for chunk_audio, _, _ in chunks],
+        sample_rate=config.TARGET_SAMPLE_RATE,
+        language=language,
+    )
+
     segments: list[dict] = []
-    for i, (chunk_audio, start_s, end_s) in enumerate(chunks):
-        text = model.transcribe_chunk(
-            chunk_audio,
-            sample_rate=config.TARGET_SAMPLE_RATE,
-            language=language,
-        )
+    for i, ((_, start_s, end_s), text) in enumerate(zip(chunks, texts)):
         if not text:
             continue
         segments.append({
