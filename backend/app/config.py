@@ -135,24 +135,3 @@ WORK_DIR = os.environ.get("ASR_WORK_DIR", "/tmp/kajian-asr")
 STREAM_CHUNK_SIZE_SEC = _env_float("ASR_STREAM_CHUNK_SIZE_SEC", 2.0)
 STREAM_UNFIXED_CHUNK_NUM = _env_int("ASR_STREAM_UNFIXED_CHUNK_NUM", 2)
 STREAM_UNFIXED_TOKEN_NUM = _env_int("ASR_STREAM_UNFIXED_TOKEN_NUM", 5)
-
-# --- Speaker embedding (/embed-speaker) -------------------------------------
-#
-# Runs entirely on CPU via sherpa-onnx (Apache-2.0, no PyTorch dependency —
-# a deliberate choice, since VRAM is already committed to the Qwen3-ASR
-# vLLM engine above; see ASR_MAX_MODEL_LEN's comment). Baked into the image
-# at build time (see Dockerfile) rather than downloaded at runtime, since
-# it's a small (~27MB), static, versioned file — same treatment as model
-# weights would get in a less bandwidth-constrained deploy.
-#
-# Model: 3D-Speaker's CAM++, bilingual (zh+en) checkpoint. No
-# Indonesian-specific speaker-embedding checkpoint exists publicly; this is
-# the best available proxy — it's the only option in sherpa-onnx's official
-# model zoo explicitly trained across languages rather than on monolingual
-# VoxCeleb-English, which matters given SVeritas benchmark data showing
-# 8-23 point EER degradation on cross-language trials for English-only
-# models. 192-dim output.
-SPEAKER_EMBEDDING_MODEL_PATH = os.environ.get(
-    "ASR_SPEAKER_EMBEDDING_MODEL_PATH",
-    "/srv/models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx",
-)

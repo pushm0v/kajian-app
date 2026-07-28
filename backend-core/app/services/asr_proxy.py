@@ -85,14 +85,18 @@ async def transcribe(model: AsrModel, audio_path: str, locale_id: str) -> dict:
 
 
 async def embed_speaker(audio_path: str) -> list[float]:
-    """Sends `audio_path` to the Qwen worker's POST /embed-speaker and
+    """Sends `audio_path` to the Whisper worker's POST /embed-speaker and
     returns the extracted speaker embedding (a 192-dim float vector — see
-    backend/app/speaker_embedding.py). Only the Qwen worker (backend/) has
-    this endpoint — speaker embedding isn't tied to which ASR model
+    backend-whisper/app/speaker_embedding.py). Only the Whisper worker
+    (backend-whisper/) has this endpoint — it runs on GPU there, since
+    that container's device has real VRAM headroom and a CUDA/cuDNN stack
+    that matches sherpa-onnx's GPU wheel, unlike the Qwen worker's vLLM-
+    committed GPU (see speaker_embedding.py's module docstring for the
+    full reasoning). Speaker embedding isn't tied to which ASR model
     transcribed the session, so it's not routed through AsrModel/
     _worker_config the way transcribe() is.
     """
-    base_url, token = config.QWEN_BACKEND_URL, config.QWEN_BACKEND_TOKEN
+    base_url, token = config.WHISPER_BACKEND_URL, config.WHISPER_BACKEND_TOKEN
     if not base_url:
         logger.warning("No ASR backend configured for speaker embedding")
         raise AsrModelUnavailable("No backend configured for speaker embedding")

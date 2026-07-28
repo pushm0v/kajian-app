@@ -2,12 +2,6 @@ fastapi>=0.115
 uvicorn[standard]>=0.32
 python-multipart>=0.0.12
 anyio>=4.0
-# CPU-only speaker embedding extraction (see app/speaker_embedding.py).
-# Apache-2.0, no PyTorch dependency at all — a deliberate choice given VRAM
-# is already committed to the Qwen3-ASR vLLM engine below; adding another
-# GPU-resident model here isn't an option on a 12GB card this tight (see
-# ASR_MAX_MODEL_LEN's comment in config.py).
-sherpa-onnx>=1.13.4
 # vLLM pins numba==0.61.2 for its speculative-decoding utilities, and numba
 # 0.61.2 only supports numpy up to 2.2 (see
 # https://numba.readthedocs.io/en/stable/release/0.61.2-notes.html). vLLM's
