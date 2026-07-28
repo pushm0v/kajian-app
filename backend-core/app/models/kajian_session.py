@@ -67,6 +67,11 @@ class KajianSession(Base):
     status: Mapped[SessionStatus] = mapped_column(
         Enum(SessionStatus, name="session_status"), default=SessionStatus.recorded
     )
+    # Set when status becomes `error` from a background job (transcribe or
+    # summarize) failing — see routers/processing.py's _run_transcription.
+    # Cleared (set back to None) whenever a new attempt starts, so a stale
+    # error from a previous failed run never lingers after a retry.
+    error_message: Mapped[str | None] = mapped_column(String, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="sessions")  # noqa: F821
     transcript: Mapped[list["TranscriptSegment"]] = relationship(  # noqa: F821

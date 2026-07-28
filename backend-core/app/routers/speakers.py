@@ -22,7 +22,7 @@ from ..auth import current_user
 from ..db import get_db
 from ..models.speaker import Speaker
 from ..models.user import User
-from ..services.speaker_matching import update_centroid
+from ..services.speaker_matching import find_best_match, update_centroid
 from .sessions import _get_owned_session, _to_out
 
 logger = logging.getLogger("kajian_core")
@@ -38,6 +38,42 @@ async def list_speakers(
     # library is global, see this module's docstring.
     result = await db.execute(select(Speaker).order_by(Speaker.name))
     return list(result.scalars().all())
+
+
+@router.get(
+    "/sessions/{session_id}/speaker-suggestion",
+    response_model=schemas.SuggestedSpeakerOut | None,
+)
+async def get_speaker_suggestion(
+    session_id: str,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Recomputes and returns the current best speaker match for
+    session.pending_embedding, or null if there's no pending embedding or
+    no candidate clears the threshold.
+
+    transcribe_session (routers/processing.py) now runs in the
+    background — there's no request/response left to attach a suggestion
+    to by the time embedding extraction finishes, so the client polls
+    GET /sessions/{id} for job completion, then calls this separately to
+    fetch (or re-fetch) the suggestion. Cheap to recompute on every call
+    (cosine similarity against a handful of stored speakers, no
+    re-embedding), so it's always current even if the speaker library
+    changed since transcription finished.
+    """
+    session = await _get_owned_session(db, user, session_id)
+    if session.pending_embedding is None:
+        return None
+
+    result = await db.execute(select(Speaker))
+    candidates = list(result.scalars().all())
+    match = find_best_match(session.pending_embedding, candidates)
+    if match is None:
+        return None
+
+    speaker, score = match
+    return schemas.SuggestedSpeakerOut(speakerId=str(speaker.id), name=speaker.name, score=round(score, 3))
 
 
 @router.post("/sessions/{session_id}/speaker-confirm", response_model=schemas.KajianSessionOut)

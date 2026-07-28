@@ -340,6 +340,26 @@ async function api(method, path, body, opts) {
   return json;
 }
 
+// POST /transcribe and /summarize now return immediately (202,
+// status=transcribing/summarizing) and finish the actual work in the
+// background — a fixed, non-configurable Cloudflare proxy timeout (125s
+// on every plan below Enterprise) kills long-held-open requests before a
+// real transcription job can finish. Poll GET /sessions/{id} instead
+// until status leaves `pendingStatuses`, or `error`.
+async function pollSession(sessionId, pendingStatuses, { intervalMs = 3000, onTick } = {}) {
+  while (true) {
+    const session = await api("GET", `/sessions/${sessionId}`);
+    if (onTick) onTick(session);
+    if (session.status === "error") {
+      throw new Error(session.errorMessage || "Job failed (no error message set)");
+    }
+    if (!pendingStatuses.includes(session.status)) {
+      return session;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+}
+
 let uuidCounter = 0;
 function makeSessionId() {
   // Good enough for a dev tool — doesn't need to be cryptographically random,
@@ -524,15 +544,20 @@ $("uploadAndTranscribe").addEventListener("click", async () => {
     await api("POST", `/sessions/${currentSessionId}/audio-confirm`);
 
     const embeddingProvider = $("speakerEmbeddingProvider").value;
-    log(`Running ASR proxy (model=${$("asrModel").value}, speaker embedding on ${embeddingProvider})… this can take a while`);
-    const session = await api(
+    log(`Starting ASR job (model=${$("asrModel").value}, speaker embedding on ${embeddingProvider})…`);
+    await api(
       "POST", `/sessions/${currentSessionId}/transcribe`,
       { model: $("asrModel").value, speakerEmbeddingProvider: embeddingProvider },
     );
+
+    log("Transcribe job accepted, polling for completion (this can take a while)…");
+    const session = await pollSession(currentSessionId, ["transcribing"], {
+      onTick: (s) => log(`  ...status=${s.status}`),
+    });
     $("transcriptOut").textContent = JSON.stringify(session.transcript, null, 2);
     log(`Transcribe complete: ${session.transcript.length} segment(s)`, "ok");
 
-    const suggestion = session.suggestedSpeaker;
+    const suggestion = await api("GET", `/sessions/${currentSessionId}/speaker-suggestion`);
     const pill = $("speakerSuggestion");
     if (suggestion) {
       pill.textContent = `Suggested: ${suggestion.name} (score ${suggestion.score}, id ${suggestion.speakerId})`;
@@ -587,8 +612,13 @@ $("listSpeakers").addEventListener("click", async () => {
 $("summarize").addEventListener("click", async () => {
   if (!currentSessionId) { log("Create a session first.", "err"); return; }
   try {
-    log("Requesting summary…");
-    const session = await api("POST", `/sessions/${currentSessionId}/summarize`, {});
+    log("Starting summarize job…");
+    await api("POST", `/sessions/${currentSessionId}/summarize`, {});
+
+    log("Summarize job accepted, polling for completion…");
+    const session = await pollSession(currentSessionId, ["summarizing"], {
+      onTick: (s) => log(`  ...status=${s.status}`),
+    });
     $("notesOut").textContent = JSON.stringify(session.note, null, 2);
     log("Summarize complete", "ok");
   } catch (e) {

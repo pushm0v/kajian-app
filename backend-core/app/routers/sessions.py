@@ -69,6 +69,20 @@ async def list_sessions(
     return [_to_out(s) for s in result.scalars().all()]
 
 
+@router.get("/{session_id}", response_model=schemas.KajianSessionOut)
+async def get_session(
+    session_id: str,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Used to poll a session's status after POST .../transcribe or
+    .../summarize, both of which now return immediately (202) and finish
+    the actual work in the background — see routers/processing.py's
+    module docstring for why (a fixed, non-configurable Cloudflare proxy
+    timeout well under how long real transcription jobs can take)."""
+    return _to_out(await _get_owned_session(db, user, session_id))
+
+
 @router.post("", response_model=schemas.KajianSessionOut, status_code=201)
 async def create_session(
     body: schemas.SessionCreateIn,
