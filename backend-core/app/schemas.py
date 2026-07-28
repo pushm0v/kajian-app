@@ -81,6 +81,13 @@ class KajianSessionOut(BaseModel):
     durationMs: int = Field(validation_alias="duration_ms", serialization_alias="durationMs")
     localeId: str = Field(validation_alias="locale_id", serialization_alias="localeId")
     status: SessionStatus
+    # Set when a background transcribe/summarize job fails (status becomes
+    # `error`) — see routers/processing.py's _run_transcription. Null
+    # otherwise, including after a successful retry (cleared on each new
+    # attempt).
+    errorMessage: str | None = Field(
+        default=None, validation_alias="error_message", serialization_alias="errorMessage",
+    )
     transcript: list[TranscriptSegmentOut] = []
     note: KajianNoteOut | None = None
     # True if audio was ever uploaded for this session — the app checks this
