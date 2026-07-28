@@ -57,6 +57,77 @@ logger = logging.getLogger("kajian_core")
 router = APIRouter(prefix="/sessions", tags=["processing"])
 
 
+async def _load_session_for_job(
+    db: AsyncSession, session_id: str, user_id,
+) -> KajianSession | None:
+    """Loads a session for a background job, eager-loading every
+    relationship that job will touch.
+
+    The eager loading is required, not an optimization — async SQLAlchemy
+    has no implicit lazy-loading (there's no greenlet context to do the
+    load in outside an awaited call), so touching an unloaded
+    relationship raises MissingGreenlet.
+
+    note.references is chained to mirror _get_owned_session in
+    routers/sessions.py, so this loader is a drop-in match for how the
+    rest of the codebase reads a session. It is defensive rather than
+    load-bearing: the delete-orphan cascade in _run_summarization was
+    measured to resolve without a lazy load, so selectinload(note) alone
+    does not currently raise — but any future code that reads
+    note.references directly would, and the cost here is one extra
+    query on a job that already takes minutes.
+
+    Getting this wrong fails *late* and expensively: _run_transcription
+    only touches .transcript after the ASR call has returned, so a
+    missing option throws away minutes of completed GPU work.
+
+    Returns None (rather than raising, as _get_owned_session does) when
+    the session is gone — a background task has no caller to raise to.
+    """
+    result = await db.execute(
+        select(KajianSession)
+        .options(
+            selectinload(KajianSession.transcript),
+            selectinload(KajianSession.note).selectinload(KajianNote.references),
+        )
+        .where(KajianSession.id == session_id, KajianSession.user_id == user_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _mark_failed(
+    db: AsyncSession, session_id: str, user_id, message: str,
+) -> None:
+    """Records a background job's failure as status=error + error_message.
+
+    Rolls back first. The failure that lands here may have come from a
+    partial flush (a bad segment, a constraint violation, a lost
+    connection), leaving `db` with a poisoned transaction — assigning to
+    the already-loaded session and committing on top of that raises a
+    *second* exception, and because this is a background task with no
+    caller, that exception is swallowed and the row stays stuck at
+    status=transcribing/summarizing forever while the client polls it.
+    Rolling back and re-reading the row on a clean transaction is what
+    guarantees the client actually learns the job failed.
+
+    Best-effort by design: if even this can't persist (DB genuinely
+    unreachable), log and give up rather than raise into the task runner.
+    """
+    try:
+        await db.rollback()
+        session = await _load_session_for_job(db, session_id, user_id)
+        if session is None:
+            return
+        session.status = SessionStatus.error
+        session.error_message = message
+        await db.commit()
+    except Exception:  # noqa: BLE001 - last-resort handler; nothing left to escalate to
+        logger.exception(
+            "%s: could not record failure state; session may be stuck in a "
+            "non-terminal status", session_id,
+        )
+
+
 async def _match_speaker(
     db: AsyncSession, session: KajianSession, local_path: str, embedding_provider: str = "",
 ) -> None:
@@ -119,17 +190,7 @@ async def _run_transcription(
     (already closed by the time this runs).
     """
     async with SessionLocal() as db:
-        # selectinload(transcript) is required, not optional — async
-        # SQLAlchemy has no implicit lazy-loading (there's no greenlet
-        # context to do the load in outside an awaited call), so
-        # `session.transcript.clear()` below would otherwise raise
-        # MissingGreenlet the first time this relationship is touched.
-        result = await db.execute(
-            select(KajianSession)
-            .options(selectinload(KajianSession.transcript))
-            .where(KajianSession.id == session_id, KajianSession.user_id == user_id)
-        )
-        session = result.scalar_one_or_none()
+        session = await _load_session_for_job(db, session_id, user_id)
         if session is None:
             logger.error("_run_transcription %s: session vanished before job started", session_id)
             return
@@ -203,9 +264,7 @@ async def _run_transcription(
             )
         except Exception as e:  # noqa: BLE001 - background task has no caller to raise to
             logger.exception("transcribe_session %s: failed", session_id)
-            session.status = SessionStatus.error
-            session.error_message = str(e)
-            await db.commit()
+            await _mark_failed(db, session_id, user_id, str(e))
         finally:
             if os.path.exists(local_path):
                 os.remove(local_path)
@@ -246,16 +305,7 @@ async def _run_summarization(session_id: str, user_id, model: str | None) -> Non
     import datetime
 
     async with SessionLocal() as db:
-        # selectinload both transcript (iterated below) and note (read/
-        # delete/reassigned below) — same MissingGreenlet reasoning as
-        # _run_transcription above: async SQLAlchemy has no implicit
-        # lazy-loading.
-        result = await db.execute(
-            select(KajianSession)
-            .options(selectinload(KajianSession.transcript), selectinload(KajianSession.note))
-            .where(KajianSession.id == session_id, KajianSession.user_id == user_id)
-        )
-        session = result.scalar_one_or_none()
+        session = await _load_session_for_job(db, session_id, user_id)
         if session is None:
             logger.error("_run_summarization %s: session vanished before job started", session_id)
             return
@@ -277,37 +327,45 @@ async def _run_summarization(session_id: str, user_id, model: str | None) -> Non
             )
         except Exception as e:  # noqa: BLE001 - background task has no caller to raise to
             logger.exception("summarize_session %s: failed", session_id)
-            session.status = SessionStatus.error
-            session.error_message = f"Summarize failed: {e}"
-            await db.commit()
+            await _mark_failed(db, session_id, user_id, f"Summarize failed: {e}")
             return
 
-        # Delete-then-flush before reassigning — see replace_note()'s
-        # docstring in routers/sessions.py for why this order matters (a
-        # unique-constraint race between the old row's DELETE and the new
-        # row's INSERT within the same flush otherwise).
-        if session.note is not None:
-            await db.delete(session.note)
-            await db.flush()
+        # Persisting is inside the try too: result_data comes from an LLM
+        # and is only shape-checked by .get() defaults, so a malformed
+        # response (or a flush error) must land on _mark_failed rather
+        # than escape and strand the row at status=summarizing.
+        try:
+            # Delete-then-flush before reassigning — see replace_note()'s
+            # docstring in routers/sessions.py for why this order matters (a
+            # unique-constraint race between the old row's DELETE and the new
+            # row's INSERT within the same flush otherwise).
+            if session.note is not None:
+                await db.delete(session.note)
+                await db.flush()
 
-        session.note = KajianNote(
-            summary=result_data.get("summary", ""),
-            key_points=result_data.get("keyPoints", []),
-            topics=result_data.get("topics", []),
-            action_items=result_data.get("actionItems", []),
-            generated_at=datetime.datetime.now(datetime.timezone.utc),
-            references=[
-                ScriptureReference(
-                    type=ref.get("type", "quran"),
-                    citation=ref.get("citation", ""),
-                    note=ref.get("note"),
-                )
-                for ref in result_data.get("references", [])
-            ],
-        )
-        session.status = SessionStatus.completed
-        session.error_message = None
-        await db.commit()
+            session.note = KajianNote(
+                summary=result_data.get("summary", ""),
+                key_points=result_data.get("keyPoints", []),
+                topics=result_data.get("topics", []),
+                action_items=result_data.get("actionItems", []),
+                generated_at=datetime.datetime.now(datetime.timezone.utc),
+                references=[
+                    ScriptureReference(
+                        type=ref.get("type", "quran"),
+                        citation=ref.get("citation", ""),
+                        note=ref.get("note"),
+                    )
+                    for ref in result_data.get("references", [])
+                ],
+            )
+            session.status = SessionStatus.completed
+            session.error_message = None
+            await db.commit()
+        except Exception as e:  # noqa: BLE001 - background task has no caller to raise to
+            logger.exception("summarize_session %s: failed to persist note", session_id)
+            await _mark_failed(db, session_id, user_id, f"Summarize failed: {e}")
+            return
+
         logger.info("summarize_session %s: done", session_id)
 
 
