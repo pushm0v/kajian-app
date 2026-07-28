@@ -13,3 +13,9 @@ httpx>=0.27
 anthropic>=0.40
 anyio>=4.0
 websockets>=13.0  # outbound WS client to the Qwen worker, see routers/streaming.py
+# Cosine similarity for speaker-embedding matching (services/speaker_matching.py)
+# — the only numerical dependency in this otherwise ML-free service. No
+# version pin needed here; this service never touches torch/vLLM/numba, so
+# none of the ABI-compatibility constraints that apply in backend/'s
+# requirements.txt are relevant.
+numpy>=1.26
