@@ -219,6 +219,26 @@
   </section>
 
   <section>
+    <h2>2b. Speaker match</h2>
+    <p>Shown after transcribing, if a speaker-embedding suggestion came back. Never auto-assigned — confirm or create a new profile explicitly.</p>
+    <div id="speakerSuggestion" class="pill">no suggestion yet</div>
+    <div class="row" style="margin-top:10px">
+      <div>
+        <label for="newSpeakerName">New speaker name (leave blank to confirm the suggestion above)</label>
+        <input type="text" id="newSpeakerName" placeholder="e.g. Ustadz Somebody" />
+      </div>
+    </div>
+    <div class="actions">
+      <button id="confirmSpeaker">Confirm / enroll speaker</button>
+      <button id="listSpeakers">List all known speakers</button>
+    </div>
+    <div style="margin-top:14px">
+      <label>Speaker library</label>
+      <pre id="speakersOut">(none yet)</pre>
+    </div>
+  </section>
+
+  <section>
     <h2>3. Summarize</h2>
     <div class="actions">
       <button id="summarize">Generate notes</button>
@@ -503,8 +523,54 @@ $("uploadAndTranscribe").addEventListener("click", async () => {
     );
     $("transcriptOut").textContent = JSON.stringify(session.transcript, null, 2);
     log(`Transcribe complete: ${session.transcript.length} segment(s)`, "ok");
+
+    const suggestion = session.suggestedSpeaker;
+    const pill = $("speakerSuggestion");
+    if (suggestion) {
+      pill.textContent = `Suggested: ${suggestion.name} (score ${suggestion.score}, id ${suggestion.speakerId})`;
+      pill.dataset.speakerId = suggestion.speakerId;
+      log(`Speaker suggestion: ${suggestion.name} (score ${suggestion.score})`, "ok");
+    } else {
+      pill.textContent = "no suggestion — either no match above threshold, or exact-name auto-confirmed already";
+      delete pill.dataset.speakerId;
+    }
   } catch (e) {
     log(`Upload/transcribe failed: ${e.message}`, "err");
+  }
+});
+
+// ---- 2b. speaker match -----------------------------------------------------
+
+$("confirmSpeaker").addEventListener("click", async () => {
+  if (!currentSessionId) { log("Create a session first.", "err"); return; }
+  const newName = $("newSpeakerName").value.trim();
+  const suggestedId = $("speakerSuggestion").dataset.speakerId;
+
+  if (!newName && !suggestedId) {
+    log("No suggestion to confirm and no new speaker name entered.", "err");
+    return;
+  }
+
+  try {
+    const body = newName ? { newSpeakerName: newName } : { speakerId: suggestedId };
+    log(newName ? `Enrolling new speaker "${newName}"…` : `Confirming suggested speaker ${suggestedId}…`);
+    const session = await api(
+      "POST", `/sessions/${currentSessionId}/speaker-confirm`, body,
+    );
+    log(`Speaker confirmed: speakerId=${session.speakerId}`, "ok");
+    $("newSpeakerName").value = "";
+  } catch (e) {
+    log(`Speaker confirm failed: ${e.message}`, "err");
+  }
+});
+
+$("listSpeakers").addEventListener("click", async () => {
+  try {
+    const speakers = await api("GET", "/speakers");
+    $("speakersOut").textContent = JSON.stringify(speakers, null, 2);
+    log(`${speakers.length} known speaker(s)`, "ok");
+  } catch (e) {
+    log(`List speakers failed: ${e.message}`, "err");
   }
 });
 

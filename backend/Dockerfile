@@ -40,7 +40,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # 22.04 required explicitly naming `python3.11` — 24.04's `python3` IS
 # 3.12).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3 python3-venv python3-dev python3-pip ffmpeg build-essential \
+        python3 python3-venv python3-dev python3-pip ffmpeg build-essential curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv
@@ -65,6 +65,17 @@ COPY requirements.txt .
 # upgrade fails ("Cannot uninstall pip 24.0, RECORD file not found").
 # 24.0 is new enough to install everything in requirements.txt correctly.
 RUN python3 -m pip install --break-system-packages -r requirements.txt
+
+# Speaker embedding model (sherpa-onnx's CAM++ bilingual checkpoint, see
+# app/config.py's SPEAKER_EMBEDDING_MODEL_PATH comment for why this one).
+# Baked into the image rather than downloaded at runtime — small (~27MB),
+# static, versioned, and this avoids a GitHub-releases dependency at
+# container startup (unlike the ASR model, which is large enough and
+# updated often enough to justify HF_HOME's runtime-download+cache-volume
+# approach below).
+RUN mkdir -p /srv/models && \
+    curl -fL -o /srv/models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx \
+        https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx
 
 COPY app ./app
 

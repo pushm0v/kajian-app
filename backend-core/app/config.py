@@ -21,6 +21,11 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    return float(raw) if raw else default
+
+
 # --- Database ---------------------------------------------------------------
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
@@ -69,6 +74,21 @@ WHISPER_BACKEND_TOKEN = os.environ.get("WHISPER_BACKEND_TOKEN", "")
 # --- AI notes (Anthropic) ----------------------------------------------------
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 DEFAULT_NOTES_MODEL = os.environ.get("DEFAULT_NOTES_MODEL", "claude-sonnet-5")
+
+# --- Speaker voice-fingerprint matching --------------------------------------
+# Minimum cosine similarity (0-1) for a stored speaker to be surfaced as a
+# suggested match — never auto-assigned, always requires user confirmation
+# (see routers/speakers.py). No published constant is appropriate here per
+# the research this feature was built on: real-world accuracy depends
+# heavily on recording conditions (this app's actual use case — mosque/
+# lecture-hall reverb, Indonesian/Arabic speech the embedding model wasn't
+# primarily trained on — degrades speaker-verification accuracy by tens of
+# percentage points per published benchmarks). 0.75 is a conservative
+# starting point, intentionally erring toward "no suggestion" over a wrong
+# one. asr_proxy/speaker_matching log every raw comparison score, so this
+# should be retuned from real data once enough confirmed/rejected
+# suggestions have accumulated to judge it against.
+SPEAKER_MATCH_THRESHOLD = _env_float("CORE_SPEAKER_MATCH_THRESHOLD", 0.75)
 
 # --- Misc --------------------------------------------------------------------
 MAX_UPLOAD_BYTES = _env_int("CORE_MAX_UPLOAD_BYTES", 300 * 1024 * 1024)

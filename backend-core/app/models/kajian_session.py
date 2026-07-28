@@ -8,7 +8,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import ARRAY, DateTime, Enum, Float, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -37,7 +37,24 @@ class KajianSession(Base):
     )
 
     title: Mapped[str] = mapped_column(String)
+    # User-typed label, entered before/at recording start — kept even after
+    # speaker_id is set below, since it's the original human-entered value
+    # and the confirmed profile's name could later be renamed independently.
     speaker: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Links to a confirmed voice profile (see models/speaker.py) once the
+    # user confirms a suggested match, or an exact-name auto-match fires.
+    # Null until confirmed — never set from an embedding match alone.
+    speaker_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("speakers.id", ondelete="SET NULL"), nullable=True
+    )
+    # Set by transcribe_session (routers/processing.py) right after a fresh
+    # /embed-speaker call, cleared once /sessions/{id}/speaker-confirm
+    # consumes it (see routers/speakers.py). Exists so confirmation doesn't
+    # need to re-download the audio and re-run CPU embedding extraction —
+    # the embedding is computed once per transcription, used at most once.
+    pending_embedding: Mapped[list[float] | None] = mapped_column(
+        ARRAY(Float), nullable=True
+    )
     location: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
@@ -59,4 +76,7 @@ class KajianSession(Base):
     )
     note: Mapped["KajianNote | None"] = relationship(  # noqa: F821
         back_populates="session", cascade="all, delete-orphan", uselist=False
+    )
+    speaker_profile: Mapped["Speaker | None"] = relationship(  # noqa: F821
+        back_populates="sessions"
     )

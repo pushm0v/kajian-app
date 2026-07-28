@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import config
 from .auth import init_firebase
-from .routers import admin, me, processing, sessions, streaming
+from .routers import admin, me, processing, sessions, speakers, streaming
 from .services.storage import ensure_bucket
 
 logging.basicConfig(level=logging.INFO)
@@ -53,6 +53,7 @@ app.add_middleware(
 app.include_router(me.router)
 app.include_router(sessions.router)
 app.include_router(processing.router)
+app.include_router(speakers.router)
 app.include_router(admin.router)
 app.include_router(streaming.router)
 
