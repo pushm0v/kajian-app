@@ -103,6 +103,16 @@ CHUNK_SECONDS = _env_float("ASR_CHUNK_SECONDS", 30.0)
 # segment (word-level split isn't attempted — see transcription.py).
 CHUNK_OVERLAP_SECONDS = _env_float("ASR_CHUNK_OVERLAP_SECONDS", 1.0)
 
+# How many chunks are submitted to vLLM in a single generate() call for
+# batch transcription (see AsrModel.transcribe_chunks). Submitting more
+# chunks per call amortizes per-call dispatch overhead better, but each
+# request in a batch holds its own KV cache slot concurrently — on a GPU
+# this tight on VRAM (see ASR_MAX_MODEL_LEN's comment above; this backend
+# already hit a KV-cache-memory startup failure once), submitting a long
+# recording's full chunk list in one call risks the same kind of OOM.
+# 8 is a conservative starting point; raise it if VRAM headroom allows.
+TRANSCRIBE_BATCH_SIZE = _env_int("ASR_TRANSCRIBE_BATCH_SIZE", 8)
+
 # Sample rate the model expects.
 TARGET_SAMPLE_RATE = 16_000
 

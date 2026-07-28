@@ -51,11 +51,20 @@ async def transcribe_session(
         "transcribe_session %s: starting (model=%s, object_key=%s)",
         session_id, model.value, session.audio_object_key,
     )
+    import anyio
+
     os.makedirs(config.WORK_DIR, exist_ok=True)
     local_path = os.path.join(config.WORK_DIR, f"{session_id}.m4a")
     try:
         logger.info("transcribe_session %s: downloading audio ...", session_id)
-        storage.download_to_path(session.audio_object_key, local_path)
+        # boto3 has no asyncio support — download_to_path blocks the calling
+        # thread for the whole transfer. Off the event loop via anyio (same
+        # pattern as summarize_session below and auth.py's Firebase call),
+        # so a large download doesn't stall every other concurrent request
+        # (health checks, websocket streaming, other users) on this server.
+        await anyio.to_thread.run_sync(
+            storage.download_to_path, session.audio_object_key, local_path,
+        )
         logger.info(
             "transcribe_session %s: downloaded %d bytes, calling ASR proxy ...",
             session_id, os.path.getsize(local_path),
