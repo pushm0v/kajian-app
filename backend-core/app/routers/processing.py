@@ -35,7 +35,7 @@ router = APIRouter(prefix="/sessions", tags=["processing"])
 
 
 async def _match_speaker(
-    db: AsyncSession, session, local_path: str,
+    db: AsyncSession, session, local_path: str, embedding_provider: str = "",
 ) -> schemas.SuggestedSpeakerOut | None:
     """Extracts a speaker embedding for `session` and either auto-confirms
     it (exact, case-insensitive match against session.speaker's typed
@@ -45,7 +45,7 @@ async def _match_speaker(
     should never fail the transcription response it's riding along with.
     """
     try:
-        embedding = await asr_proxy.embed_speaker(local_path)
+        embedding = await asr_proxy.embed_speaker(local_path, embedding_provider)
     except Exception:  # noqa: BLE001 - best-effort; transcription already succeeded
         logger.exception("transcribe_session %s: speaker embedding failed, skipping", session.id)
         return None
@@ -145,7 +145,9 @@ async def transcribe_session(
         # so a speaker-embedding failure never fails the transcription
         # response it's riding along with. See that function's docstring
         # for the auto-confirm vs. suggest-only split.
-        suggested_speaker = await _match_speaker(db, session, local_path)
+        suggested_speaker = await _match_speaker(
+            db, session, local_path, body.speakerEmbeddingProvider,
+        )
 
         await db.commit()
         logger.info(

@@ -155,6 +155,13 @@ class AudioDownloadUrlOut(BaseModel):
 
 class TranscribeRequestIn(BaseModel):
     model: str = "qwen"  # "qwen" | "whisper"
+    # Optional override for the speaker-embedding step's provider ("cpu"
+    # or "cuda") — passed through to the Whisper worker's /embed-speaker
+    # (see its config.py's SPEAKER_EMBEDDING_PROVIDER comment for why this
+    # defaults to cpu). Empty/omitted means "use that worker's own
+    # default." Exposed so the dev-console can toggle it per-request
+    # without restarting any container.
+    speakerEmbeddingProvider: str = ""
 
 
 class SummarizeRequestIn(BaseModel):

@@ -3,19 +3,23 @@
 sessions. See config.py's SPEAKER_EMBEDDING_MODEL_PATH comment for why
 this model.
 
-Runs on GPU (this container's device 1), not the Qwen worker's device 0
-where this originally shipped: device 0 runs vLLM, which reserves VRAM
-upfront and left almost no headroom (max_model_len had to be capped just
-to fit the ASR model itself). faster-whisper (this container) only holds
-what its own model weights need — no upfront reservation — leaving real
-headroom, and critically this container's base image is already CUDA
-12/cuDNN 9 (matching what sherpa-onnx's GPU wheel targets), unlike device
-0's CUDA 13.2/torch 2.10 stack, which would have risked a cuDNN version
-conflict between two independently-bundled CUDA runtimes in one process.
+Lives in this container (not the Qwen worker's, where this originally
+shipped) because this container's CUDA 12/cuDNN 9 base image matches what
+sherpa-onnx's GPU wheel targets, unlike the Qwen worker's CUDA 13.2/torch
+2.10 stack (a real risk of two independently-bundled CUDA runtimes
+conflicting in one process). GPU provider is opt-in, not default: in
+practice Whisper large-v3 at float16 was found to already consume nearly
+this whole 12GB card (~11.6GB), leaving too little headroom for
+sherpa-onnx's CUDA execution provider (a 27MB model still needed ~2.75GB
+for a single Conv node's workspace — a known ONNX Runtime CUDA EP
+over-allocation pattern, not a bug specific to this model). CPU defaults
+until that's tuned (arena/allocator settings, or a smaller Whisper
+compute_type) and confirmed to actually fit.
 
-Deliberately separate from asr_model.py: different model, different
-lifecycle (stateless per-call, no lock contention with Whisper inference
-beyond sharing the same GPU).
+Supports switching provider at runtime (see load()) — reloads the
+extractor on demand rather than keeping both a CPU and GPU instance
+loaded simultaneously, since the GPU one may simply fail to load/run
+depending on current VRAM pressure from Whisper.
 
 API confirmed against sherpa-onnx 1.13.4's own python-api-examples/
 speaker-identification.py and speaker-embedding-manager.cc:
@@ -44,18 +48,28 @@ logger = logging.getLogger("kajian_whisper")
 class SpeakerEmbedder:
     """Thread-safe wrapper around a single loaded sherpa-onnx speaker
     embedding extractor. Mirrors WhisperModelWrapper's load()/lock/
-    singleton shape (see asr_model.py)."""
+    singleton shape (see asr_model.py), but additionally supports
+    reloading with a different provider on demand (see load())."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._extractor = None
+        self._provider: str | None = None
 
-    def load(self) -> None:
-        if self._extractor is not None:
+    def load(self, provider: str | None = None) -> None:
+        """Loads the extractor with `provider` ("cpu" or "cuda"), or
+        config.SPEAKER_EMBEDDING_PROVIDER if not given. A no-op if already
+        loaded with that same provider; reloads (replacing the extractor)
+        if a different provider is requested — e.g. the dev-console's
+        provider toggle, see main.py's /embed-speaker.
+        """
+        provider = provider or config.SPEAKER_EMBEDDING_PROVIDER
+        if self._extractor is not None and self._provider == provider:
             return
+
         logger.info(
             "Loading speaker embedding model from %s (provider=%s) ...",
-            config.SPEAKER_EMBEDDING_MODEL_PATH, config.SPEAKER_EMBEDDING_PROVIDER,
+            config.SPEAKER_EMBEDDING_MODEL_PATH, provider,
         )
         # Imported lazily so config-only tooling doesn't need sherpa_onnx
         # installed (matches asr_model.py's lazy faster_whisper import).
@@ -64,7 +78,7 @@ class SpeakerEmbedder:
         embedder_config = sherpa_onnx.SpeakerEmbeddingExtractorConfig(
             model=config.SPEAKER_EMBEDDING_MODEL_PATH,
             num_threads=1,
-            provider=config.SPEAKER_EMBEDDING_PROVIDER,
+            provider=provider,
         )
         if not embedder_config.validate():
             raise RuntimeError(
@@ -72,9 +86,12 @@ class SpeakerEmbedder:
                 f"(check SPEAKER_EMBEDDING_MODEL_PATH exists and the sherpa-onnx "
                 f"GPU wheel is installed if provider=cuda)"
             )
-        self._extractor = sherpa_onnx.SpeakerEmbeddingExtractor(embedder_config)
+        with self._lock:
+            self._extractor = sherpa_onnx.SpeakerEmbeddingExtractor(embedder_config)
+            self._provider = provider
         logger.info(
-            "Speaker embedding model loaded (dim=%d).", self._extractor.dim,
+            "Speaker embedding model loaded (dim=%d, provider=%s).",
+            self._extractor.dim, provider,
         )
 
     @property
@@ -82,21 +99,27 @@ class SpeakerEmbedder:
         return self._extractor is not None
 
     @property
+    def provider(self) -> str | None:
+        return self._provider
+
+    @property
     def dim(self) -> int:
         if self._extractor is None:
             raise RuntimeError("SpeakerEmbedder.load() must be called before use")
         return self._extractor.dim
 
-    def embed(self, waveform: np.ndarray, sample_rate: int) -> list[float]:
+    def embed(self, waveform: np.ndarray, sample_rate: int, provider: str | None = None) -> list[float]:
         """Extracts a speaker embedding from a mono float32 waveform.
 
         `waveform` should be the same 16kHz mono float32 array
         decode_to_mono_16k already produces — no separate decode needed.
+        If `provider` differs from what's currently loaded, reloads the
+        extractor first (see load()) — a few seconds of one-time cost
+        when switching, not a per-call cost otherwise.
         Returns a plain list[float] (JSON-serializable) rather than an
         ndarray, since this crosses an HTTP boundary (see main.py).
         """
-        if self._extractor is None:
-            raise RuntimeError("SpeakerEmbedder.load() must be called before use")
+        self.load(provider)
 
         with self._lock:
             stream = self._extractor.create_stream()
