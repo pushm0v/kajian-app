@@ -129,7 +129,11 @@ async def _mark_failed(
 
 
 async def _match_speaker(
-    db: AsyncSession, session: KajianSession, local_path: str, embedding_provider: str = "",
+    db: AsyncSession,
+    session: KajianSession,
+    local_path: str,
+    embedding_provider: str = "",
+    embedding_model: str = "",
 ) -> None:
     """Extracts a speaker embedding for `session` and either auto-confirms
     it (exact, case-insensitive match against session.speaker's typed
@@ -147,7 +151,9 @@ async def _match_speaker(
     should never fail the transcription job it's riding along with.
     """
     try:
-        embedding = await asr_proxy.embed_speaker(local_path, embedding_provider)
+        embedding = await asr_proxy.embed_speaker(
+            local_path, embedding_provider, embedding_model,
+        )
     except Exception:  # noqa: BLE001 - best-effort; transcription already succeeded
         logger.exception("transcribe_session %s: speaker embedding failed, skipping", session.id)
         return
@@ -182,7 +188,11 @@ async def _match_speaker(
 
 
 async def _run_transcription(
-    session_id: str, user_id, model_value: str, speaker_embedding_provider: str,
+    session_id: str,
+    user_id,
+    model_value: str,
+    speaker_embedding_provider: str,
+    speaker_embedding_model: str = "",
 ) -> None:
     """The actual transcribe job — download, ASR proxy, speaker embedding,
     persist. Runs as a BackgroundTask (see transcribe_session below), so
@@ -255,7 +265,10 @@ async def _run_transcription(
             # the finally block below) — its own try/except inside
             # _match_speaker so a speaker-embedding failure never fails
             # the transcription job it's riding along with.
-            await _match_speaker(db, session, local_path, speaker_embedding_provider)
+            await _match_speaker(
+                db, session, local_path,
+                speaker_embedding_provider, speaker_embedding_model,
+            )
 
             await db.commit()
             logger.info(
@@ -292,7 +305,8 @@ async def transcribe_session(
     await db.commit()
 
     background_tasks.add_task(
-        _run_transcription, session_id, user.id, body.model, body.speakerEmbeddingProvider,
+        _run_transcription, session_id, user.id, body.model,
+        body.speakerEmbeddingProvider, body.speakerEmbeddingModel,
     )
     logger.info("transcribe_session %s: scheduled as background task", session_id)
 

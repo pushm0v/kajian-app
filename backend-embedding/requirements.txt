@@ -1,0 +1,16 @@
+fastapi>=0.115
+uvicorn[standard]>=0.32
+python-multipart>=0.0.12
+anyio>=4.0
+numpy>=1.24
+# GPU-enabled sherpa-onnx (see app/speaker_embedding.py) — a DIFFERENT
+# wheel from the standard PyPI `sherpa-onnx` package (same relationship as
+# onnxruntime vs onnxruntime-gpu), hosted on a custom index rather than
+# PyPI proper. Its CUDA 12/cuDNN 9 target matches this image's base (see
+# Dockerfile).
+#
+# Note this wheel serves BOTH providers: provider="cpu" works fine here
+# too, so falling back to CPU needs no different install — see
+# app/config.py's PROVIDER.
+--find-links https://k2-fsa.github.io/sherpa/onnx/cuda.html
+sherpa-onnx==1.13.4+cuda12.cudnn9

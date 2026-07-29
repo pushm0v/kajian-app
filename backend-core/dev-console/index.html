@@ -204,15 +204,22 @@
       <div>
         <label for="asrModel">Model</label>
         <select id="asrModel">
+          <option value="whisper" selected>whisper (default)</option>
           <option value="qwen">qwen</option>
-          <option value="whisper">whisper</option>
         </select>
       </div>
       <div>
         <label for="speakerEmbeddingProvider">Speaker embedding runs on</label>
         <select id="speakerEmbeddingProvider">
-          <option value="cpu" selected>CPU (default)</option>
-          <option value="cuda">GPU (cuda)</option>
+          <option value="cuda" selected>GPU (cuda, default)</option>
+          <option value="cpu">CPU</option>
+        </select>
+      </div>
+      <div>
+        <label for="speakerEmbeddingModel">Speaker embedding model</label>
+        <select id="speakerEmbeddingModel">
+          <option value="campplus" selected>CAM++ (zh+en, default)</option>
+          <option value="eres2netv2">ERes2NetV2 (zh-cn)</option>
         </select>
       </div>
     </div>
@@ -544,10 +551,18 @@ $("uploadAndTranscribe").addEventListener("click", async () => {
     await api("POST", `/sessions/${currentSessionId}/audio-confirm`);
 
     const embeddingProvider = $("speakerEmbeddingProvider").value;
-    log(`Starting ASR job (model=${$("asrModel").value}, speaker embedding on ${embeddingProvider})…`);
+    const embeddingModel = $("speakerEmbeddingModel").value;
+    log(
+      `Starting ASR job (model=${$("asrModel").value}, speaker embedding ` +
+      `${embeddingModel} on ${embeddingProvider})…`
+    );
     await api(
       "POST", `/sessions/${currentSessionId}/transcribe`,
-      { model: $("asrModel").value, speakerEmbeddingProvider: embeddingProvider },
+      {
+        model: $("asrModel").value,
+        speakerEmbeddingProvider: embeddingProvider,
+        speakerEmbeddingModel: embeddingModel,
+      },
     );
 
     log("Transcribe job accepted, polling for completion (this can take a while)…");

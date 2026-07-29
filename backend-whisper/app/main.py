@@ -13,6 +13,12 @@ No WS /transcribe/stream endpoint here: faster-whisper has no equivalent
 to Qwen3-ASR's incremental-decoding API, so live streaming during
 recording isn't offered by this backend. Point the app at the Qwen
 backend instead if live cloud captions are needed.
+
+Speaker embedding (/embed-speaker) used to live here too. It moved to
+../backend-embedding/, its own container on its own GPU: large-v3's
+float16 weights were measured using ~11.6GB of this 12GB card, which left
+too little headroom for ONNX Runtime's CUDA provider and forced the
+embedding step onto CPU. Splitting them lets both run on GPU.
 """
 
 from __future__ import annotations
@@ -30,8 +36,6 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from . import config
 from .asr_model import model
-from .audio import decode_to_mono_16k
-from .speaker_embedding import embedder
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("kajian_whisper")
@@ -44,7 +48,6 @@ async def lifespan(_: FastAPI):
     os.makedirs(config.WORK_DIR, exist_ok=True)
     os.makedirs(config.MODEL_CACHE_DIR, exist_ok=True)
     model.load()
-    embedder.load()
     yield
     shutil.rmtree(config.WORK_DIR, ignore_errors=True)
 
@@ -62,7 +65,7 @@ def _check_auth(creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) -
 @app.get("/health")
 def health() -> dict:
     return {
-        "status": "ok" if model.is_loaded and embedder.is_loaded else "loading",
+        "status": "ok" if model.is_loaded else "loading",
         "model": config.MODEL_SIZE,
         "device": model.device,
     }
@@ -100,8 +103,7 @@ async def transcribe(
         started = time.monotonic()
         # model.transcribe is blocking (CTranslate2 inference) — off the
         # event loop so a long transcription doesn't stall other
-        # concurrent requests (health checks, /embed-speaker) on this same
-        # process.
+        # concurrent requests (e.g. health checks) on this same process.
         segments = await anyio.to_thread.run_sync(model.transcribe, tmp_path, locale)
         processing_ms = round((time.monotonic() - started) * 1000)
         # Duration of transcribed audio, derived from the last segment's end.
@@ -123,77 +125,6 @@ async def transcribe(
     except Exception as e:  # noqa: BLE001 - convert to the app's expected error shape
         logger.exception("Transcription failed")
         raise HTTPException(status_code=500, detail=f"Transcription failed: {e}") from e
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-
-
-@app.post("/embed-speaker")
-async def embed_speaker(
-    audio: UploadFile = File(...),
-    provider: str = Form(default=""),
-    _auth: None = Depends(_check_auth),
-) -> dict:
-    """Extracts a 192-dim speaker embedding from an uploaded recording, for
-    backend-core's voice-fingerprint matching (see its
-    services/speaker_matching.py). Lives on this container (not the Qwen
-    worker's) — see speaker_embedding.py's module docstring for why.
-    A separate endpoint from /transcribe — different model, different
-    failure modes — kept independently callable rather than piggybacked
-    onto the transcription response.
-
-    `provider` ("cpu" or "cuda") optionally overrides
-    config.SPEAKER_EMBEDDING_PROVIDER for this call — used by the
-    dev-console's CPU/GPU toggle to switch without restarting this
-    container. Reloads the extractor if it differs from what's currently
-    loaded (a few seconds of one-time cost, see SpeakerEmbedder.load()).
-    """
-    if not embedder.is_loaded:
-        raise HTTPException(status_code=503, detail="Speaker embedding model is still loading, retry shortly")
-
-    upload_id = uuid.uuid4().hex
-    suffix = os.path.splitext(audio.filename or "")[1] or ".m4a"
-    tmp_path = os.path.join(config.WORK_DIR, f"{upload_id}{suffix}")
-
-    size = 0
-    try:
-        with open(tmp_path, "wb") as f:
-            while chunk := await audio.read(1024 * 1024):
-                size += len(chunk)
-                if size > config.MAX_UPLOAD_BYTES:
-                    raise HTTPException(status_code=413, detail="Audio file too large")
-                f.write(chunk)
-
-        started = time.monotonic()
-        # decode_to_mono_16k is blocking (ffmpeg subprocess) — off the
-        # event loop, same anyio.to_thread pattern used for /transcribe
-        # above. embedder.embed itself runs a GPU inference call, which
-        # releases the GIL during the actual CUDA work, but the Python-side
-        # setup/dispatch is still worth keeping off the loop for
-        # consistency and to avoid blocking during any CPU-side ONNX
-        # Runtime bookkeeping around the call.
-        waveform = await anyio.to_thread.run_sync(decode_to_mono_16k, tmp_path)
-        if waveform.size == 0:
-            raise HTTPException(status_code=422, detail="No audio content decoded from upload")
-        embedding = await anyio.to_thread.run_sync(
-            embedder.embed, waveform, config.TARGET_SAMPLE_RATE, provider or None,
-        )
-        processing_ms = round((time.monotonic() - started) * 1000)
-        logger.info(
-            "Speaker embedding extracted in %dms (dim=%d, audio_samples=%d, provider=%s)",
-            processing_ms, len(embedding), waveform.size, embedder.provider,
-        )
-        return {
-            "embedding": embedding,
-            "dim": len(embedding),
-            "processing_ms": processing_ms,
-            "provider": embedder.provider,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:  # noqa: BLE001 - convert to the app's expected error shape
-        logger.exception("Speaker embedding extraction failed")
-        raise HTTPException(status_code=500, detail=f"Speaker embedding extraction failed: {e}") from e
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)

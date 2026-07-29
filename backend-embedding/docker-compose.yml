@@ -1,0 +1,36 @@
+services:
+  kajian-embedding:
+    build: .
+    ports:
+      # Distinct from ../backend/'s 8080/8081 and ../backend-whisper/'s
+      # 8082, so all three can run on the same host at once.
+      - "8083:8080"
+    env_file:
+      - .env
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              # Device 0 — the card previously held by ../backend/'s
+              # Qwen/vLLM worker. vLLM reserves a large block of VRAM
+              # upfront, so that container must be STOPPED before this one
+              # can use CUDA here; they cannot share this card. Device 1
+              # stays dedicated to ../backend-whisper/, which is the whole
+              # point of splitting this service out (see app/config.py's
+              # PROVIDER comment for the VRAM measurements that forced it).
+              device_ids: ['0']
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3.11", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # Model weights are baked into the image, so startup is just process
+      # boot plus one ONNX session init — no download window needed here
+      # (unlike backend-whisper, which pulls weights on first run).
+      start_period: 60s
