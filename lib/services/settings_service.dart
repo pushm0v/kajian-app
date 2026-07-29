@@ -104,9 +104,13 @@ class SettingsService {
   Future<CloudModel> getCloudModel() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_keyCloudModel);
+    // Whisper is the default: the Qwen worker holds GPU device 0, which the
+    // dedicated speaker embedding service now needs, so Qwen is expected to
+    // be stopped in the current deployment. It stays selectable for setups
+    // that still run it.
     final saved = CloudModel.values.firstWhere(
       (m) => m.name == raw,
-      orElse: () => CloudModel.qwen,
+      orElse: () => CloudModel.whisper,
     );
     // If the saved model isn't configured but the other is, fall back to it
     // rather than silently producing mock output.

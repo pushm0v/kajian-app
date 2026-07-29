@@ -20,7 +20,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _onDevice = OnDeviceTranscriptionService();
 
   TranscriptionMode? _mode;
-  CloudModel _cloudModel = CloudModel.qwen;
+  CloudModel _cloudModel = CloudModel.whisper;
   bool _modelReady = false;
   bool _downloading = false;
   bool _cloudLiveCaptionsEnabled = false;

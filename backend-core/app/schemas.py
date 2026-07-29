@@ -161,14 +161,23 @@ class AudioDownloadUrlOut(BaseModel):
 
 
 class TranscribeRequestIn(BaseModel):
-    model: str = "qwen"  # "qwen" | "whisper"
-    # Optional override for the speaker-embedding step's provider ("cpu"
-    # or "cuda") — passed through to the Whisper worker's /embed-speaker
-    # (see its config.py's SPEAKER_EMBEDDING_PROVIDER comment for why this
-    # defaults to cpu). Empty/omitted means "use that worker's own
-    # default." Exposed so the dev-console can toggle it per-request
-    # without restarting any container.
+    # "whisper" | "qwen". Whisper is the default: the Qwen worker holds
+    # GPU device 0, which the dedicated speaker embedding service
+    # (../backend-embedding/) now needs, so Qwen is expected to be stopped
+    # in this deployment. It stays selectable for callers that still have
+    # that worker running.
+    model: str = "whisper"
+    # Optional overrides for the speaker-embedding step, passed through to
+    # the embedding service's /embed-speaker. Empty/omitted means "use
+    # that service's own default". Exposed so the dev-console can toggle
+    # per-request without restarting any container.
+    #
+    # provider: "cpu" | "cuda" (service default: cuda — it has its own GPU)
+    # model:    "campplus" | "eres2netv2" (service default: campplus, the
+    #           only multilingual checkpoint available; see that service's
+    #           config.py for why that matters for Indonesian audio)
     speakerEmbeddingProvider: str = ""
+    speakerEmbeddingModel: str = ""
 
 
 class SummarizeRequestIn(BaseModel):

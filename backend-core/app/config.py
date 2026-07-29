@@ -71,6 +71,19 @@ WHISPER_BACKEND_URL = os.environ.get("WHISPER_BACKEND_URL", "")
 QWEN_BACKEND_TOKEN = os.environ.get("QWEN_BACKEND_TOKEN", "")
 WHISPER_BACKEND_TOKEN = os.environ.get("WHISPER_BACKEND_TOKEN", "")
 
+# --- Speaker embedding worker proxy ------------------------------------------
+# Base URL of the dedicated speaker embedding service
+# (see ../backend-embedding/). This used to be the Whisper worker's
+# /embed-speaker endpoint; it moved to its own container so it could run
+# on a GPU of its own rather than being forced onto CPU by Whisper's VRAM
+# footprint (see that service's config.py for the measurements).
+#
+# No fallback to WHISPER_BACKEND_URL: the Whisper worker no longer serves
+# /embed-speaker, so silently routing there would produce a confusing 404
+# rather than a clear "not configured" error.
+EMBEDDING_BACKEND_URL = os.environ.get("EMBEDDING_BACKEND_URL", "")
+EMBEDDING_BACKEND_TOKEN = os.environ.get("EMBEDDING_BACKEND_TOKEN", "")
+
 # --- AI notes (Anthropic) ----------------------------------------------------
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 DEFAULT_NOTES_MODEL = os.environ.get("DEFAULT_NOTES_MODEL", "claude-sonnet-5")

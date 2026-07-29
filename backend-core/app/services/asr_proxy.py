@@ -84,33 +84,37 @@ async def transcribe(model: AsrModel, audio_path: str, locale_id: str) -> dict:
     return result
 
 
-async def embed_speaker(audio_path: str, provider: str = "") -> list[float]:
-    """Sends `audio_path` to the Whisper worker's POST /embed-speaker and
-    returns the extracted speaker embedding (a 192-dim float vector — see
-    backend-whisper/app/speaker_embedding.py). Only the Whisper worker
-    (backend-whisper/) has this endpoint — its base image's CUDA/cuDNN
-    stack matches sherpa-onnx's GPU wheel, unlike the Qwen worker's newer
-    CUDA/torch stack (see speaker_embedding.py's module docstring for the
-    full reasoning) — though in practice VRAM headroom on that GPU turned
-    out to be the harder constraint, which is why `provider` defaults to
-    empty (that worker's own config default, currently "cpu") rather than
-    always requesting GPU. Speaker embedding isn't tied to which ASR model
-    transcribed the session, so it's not routed through AsrModel/
-    _worker_config the way transcribe() is.
+async def embed_speaker(audio_path: str, provider: str = "", model: str = "") -> list[float]:
+    """Sends `audio_path` to the dedicated speaker embedding service's POST
+    /embed-speaker and returns the extracted embedding (a 192-dim float
+    vector — see backend-embedding/app/speaker_embedding.py).
 
-    `provider` ("cpu"/"cuda"/"") is forwarded as-is to the worker, which
-    interprets "" as "use my own configured default."
+    This used to hit the Whisper worker, which hosted the endpoint because
+    its CUDA 12/cuDNN 9 base matched sherpa-onnx's GPU wheel. That
+    reasoning still holds, but VRAM headroom turned out to be the harder
+    constraint: Whisper large-v3's float16 weights left too little of that
+    12GB card free, forcing embedding onto CPU. It now runs in its own
+    container on its own GPU (see ../backend-embedding/), so `provider`
+    defaults to that service's own default, which is "cuda".
+
+    Speaker embedding isn't tied to which ASR model transcribed the
+    session, so it's not routed through AsrModel/_worker_config the way
+    transcribe() is.
+
+    `provider` ("cpu"/"cuda"/"") and `model` ("campplus"/"eres2netv2"/"")
+    are forwarded as-is; the service interprets "" as "use my own
+    configured default."
     """
-    base_url, token = config.WHISPER_BACKEND_URL, config.WHISPER_BACKEND_TOKEN
+    base_url, token = config.EMBEDDING_BACKEND_URL, config.EMBEDDING_BACKEND_TOKEN
     if not base_url:
-        logger.warning("No ASR backend configured for speaker embedding")
+        logger.warning("No speaker embedding backend configured")
         raise AsrModelUnavailable("No backend configured for speaker embedding")
 
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     audio_bytes = os.path.getsize(audio_path)
     logger.info(
-        "ASR proxy: POST %s/embed-speaker (audio_bytes=%d, provider=%s) ...",
-        base_url, audio_bytes, provider or "(worker default)",
+        "Embedding proxy: POST %s/embed-speaker (audio_bytes=%d, provider=%s, model=%s) ...",
+        base_url, audio_bytes, provider or "(service default)", model or "(service default)",
     )
     started = time.monotonic()
 
@@ -122,13 +126,13 @@ async def embed_speaker(audio_path: str, provider: str = "") -> list[float]:
                 response = await client.post(
                     f"{base_url}/embed-speaker",
                     headers=headers,
-                    data={"provider": provider},
+                    data={"provider": provider, "model": model},
                     files={"audio": (audio_path.rsplit("/", 1)[-1], f, "audio/m4a")},
                 )
         response.raise_for_status()
     except Exception:
         logger.exception(
-            "ASR proxy failed after %.1fs (%s/embed-speaker)",
+            "Embedding proxy failed after %.1fs (%s/embed-speaker)",
             time.monotonic() - started, base_url,
         )
         raise
@@ -136,7 +140,7 @@ async def embed_speaker(audio_path: str, provider: str = "") -> list[float]:
     elapsed = time.monotonic() - started
     result = response.json()
     logger.info(
-        "ASR proxy: %s/embed-speaker completed in %.1fs (dim=%d, provider=%s)",
-        base_url, elapsed, result.get("dim", -1), result.get("provider"),
+        "Embedding proxy: %s/embed-speaker completed in %.1fs (dim=%d, provider=%s, model=%s)",
+        base_url, elapsed, result.get("dim", -1), result.get("provider"), result.get("model"),
     )
     return result["embedding"]

@@ -1,11 +1,10 @@
-"""Audio decoding for speaker embedding extraction (see
-speaker_embedding.py). This backend's own /transcribe path doesn't need
-this — faster-whisper decodes audio internally via PyAV, no ffmpeg
-required for that. This module exists solely because sherpa-onnx's
-SpeakerEmbeddingExtractor needs a raw waveform handed to it directly, the
-same decode step already used by ../backend/'s asr_model.py's speaker
-embedding path — kept here as an exact port rather than a shared/vendored
-module, since these are two independently deployable containers.
+"""Audio decoding for speaker embedding extraction.
+
+sherpa-onnx's SpeakerEmbeddingExtractor needs a raw waveform handed to it
+directly, so uploads are decoded here via ffmpeg before extraction. Ported
+as-is from ../backend-whisper/app/audio.py (which in turn came from
+../backend/) rather than shared/vendored, since these are independently
+deployable containers with no common package.
 """
 
 from __future__ import annotations
