@@ -1,11 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
+import '../models/kajian_note.dart';
 import '../models/kajian_session.dart';
 import '../models/transcript_segment.dart';
 import '../services/ai_notes_service.dart';
 import '../services/cloud_transcription_service.dart';
 import '../services/core_api_client.dart';
-import '../services/on_device_transcription_service.dart';
 import '../services/settings_service.dart';
 import '../services/storage_service.dart';
 
@@ -24,14 +26,13 @@ import '../services/storage_service.dart';
 /// a kajian never depends on connectivity.
 ///
 /// The accurate (post-recording) transcription pass runs against the
-/// cloud backend (proxied through backend-core, which then talks to the
-/// Qwen/Whisper ASR workers) or fully on-device (whisper.cpp), per the
-/// user's [TranscriptionMode] setting — on-device transcription has no
-/// server involvement at all, since inference happens on the phone.
+/// cloud backend, proxied through backend-core, which then talks to the
+/// Qwen/Whisper ASR workers. On-device (whisper.cpp) transcription was
+/// removed: the small `base` model it downloaded to the phone was
+/// meaningfully worse than the self-hosted large-v3 behind the backend.
 class SessionProvider extends ChangeNotifier {
   final StorageService _storage;
   final CloudTranscriptionService _cloud;
-  final OnDeviceTranscriptionService _onDevice;
   final SettingsService _settings;
   final AiNotesService _ai;
   final CoreApiClientBase _core;
@@ -44,14 +45,12 @@ class SessionProvider extends ChangeNotifier {
   SessionProvider({
     StorageService? storage,
     CloudTranscriptionService? cloud,
-    OnDeviceTranscriptionService? onDevice,
     SettingsService? settings,
     AiNotesService? ai,
     CoreApiClientBase? core,
     this.syncEnabled = false,
   })  : _storage = storage ?? StorageService(),
         _cloud = cloud ?? CloudTranscriptionService(),
-        _onDevice = onDevice ?? OnDeviceTranscriptionService(),
         _settings = settings ?? SettingsService(),
         _ai = ai ?? AiNotesService(),
         _core = core ?? CoreApiClient();
@@ -161,9 +160,9 @@ class SessionProvider extends ChangeNotifier {
     }
   }
 
-  /// Full post-recording pipeline: refine the transcript (cloud or
-  /// on-device, per the user's setting), then generate structured AI notes.
-  /// Safe to call again to re-process.
+  /// Full post-recording pipeline: refine the transcript via the cloud
+  /// backend, then generate structured AI notes. Safe to call again to
+  /// re-process.
   Future<void> process(String id) async {
     var session = byId(id);
     if (session == null) return;
@@ -172,47 +171,94 @@ class SessionProvider extends ChangeNotifier {
     if (session.audioFilePath != null) {
       await upsert(session.copyWith(status: SessionStatus.transcribing));
       try {
-        final mode = await _settings.getTranscriptionMode();
-        final segments = mode == TranscriptionMode.onDevice
-            ? await _onDevice.transcribe(
-                audioFilePath: session.audioFilePath!,
-                localeId: session.localeId,
-              )
-            : await _transcribeViaServer(byId(id)!);
+        final segments = await _transcribeViaServer(byId(id)!);
         session = byId(id)!.copyWith(
           transcript: segments,
           status: SessionStatus.transcribed,
         );
         await upsert(session);
       } catch (e) {
-        await upsert(byId(id)!.copyWith(status: SessionStatus.error));
+        await upsert(byId(id)!.copyWith(
+          status: SessionStatus.error,
+          errorMessage: _reasonFrom(e),
+        ));
         rethrow;
       }
     }
 
     // 2) AI notes from the (best available) transcript.
+    //
+    // Bail out if transcription produced nothing. Summarizing an empty
+    // transcript is rejected server-side with a 400 ("Session has no
+    // transcript yet"), which reaches the user as a raw HTTP error that
+    // says nothing about what to do — so this stops here instead, and
+    // reports it as the failure it is rather than marking the session
+    // `completed` as it once did.
     session = byId(id)!;
     if (!session.hasTranscript) {
-      await upsert(session.copyWith(status: SessionStatus.completed));
+      await upsert(session.copyWith(
+        status: SessionStatus.error,
+        errorMessage: session.errorMessage ??
+            'Transcription produced no text, so there is nothing to '
+                'summarize. Try transcribing again.',
+      ));
       return;
     }
 
     await upsert(session.copyWith(status: SessionStatus.summarizing));
     try {
-      final note = _canSync
-          ? (await _core.summarize(id)).note!
-          : await _ai.generate(
-              transcript: session.plainTranscript,
-              title: session.title,
-            );
+      final note = await _generateNote(id, session);
       await upsert(byId(id)!.copyWith(
         note: note,
         status: SessionStatus.completed,
+        clearErrorMessage: true,
       ));
     } catch (e) {
-      await upsert(byId(id)!.copyWith(status: SessionStatus.error));
+      await upsert(byId(id)!.copyWith(
+        status: SessionStatus.error,
+        errorMessage: _reasonFrom(e),
+      ));
       rethrow;
     }
+  }
+
+  /// Generates notes via the server (when syncing) or on-device AI.
+  ///
+  /// The server path returns the whole session; its `note` is non-null on
+  /// success but the field is nullable, so a null here means the job
+  /// reported success without producing one. That used to be a bare `!`,
+  /// which surfaced as an opaque null-check crash — this reports it as the
+  /// server-side problem it actually is.
+  Future<KajianNote> _generateNote(String id, KajianSession session) async {
+    if (!_canSync) {
+      return _ai.generate(
+        transcript: session.plainTranscript,
+        title: session.title,
+      );
+    }
+    final updated = await _core.summarize(id);
+    final note = updated.note;
+    if (note == null) {
+      throw StateError(
+        updated.errorMessage ??
+            'The server finished summarizing but returned no notes.',
+      );
+    }
+    return note;
+  }
+
+  /// Unwraps an exception into something worth showing a user.
+  ///
+  /// Errors from [CoreApiClient] are already the server's own
+  /// `error_message` (see its _pollUntilDone), so the wrapper text that
+  /// `toString()` prepends — "HttpException: " — is noise here.
+  static String _reasonFrom(Object e) {
+    final raw = e is HttpException
+        ? e.message
+        : e is StateError
+            ? e.message
+            : e.toString();
+    return raw.trim().isEmpty ? 'Something went wrong.' : raw.trim();
   }
 
   /// Cloud transcription now runs server-side: upload the audio (if not
@@ -243,21 +289,29 @@ class SessionProvider extends ChangeNotifier {
   /// Regenerate only the AI notes (e.g. after editing the transcript).
   Future<void> regenerateNotes(String id) async {
     final session = byId(id);
-    if (session == null || !session.hasTranscript) return;
+    if (session == null) return;
+    // Throw rather than return silently: this is user-initiated (the
+    // "regenerate" button), so doing nothing at all looks like the button
+    // is broken. The server would reject it with a 400 anyway.
+    if (!session.hasTranscript) {
+      throw StateError(
+        'This session has no transcript yet, so there is nothing to '
+        'summarize.',
+      );
+    }
     await upsert(session.copyWith(status: SessionStatus.summarizing));
     try {
-      final note = _canSync
-          ? (await _core.summarize(id)).note!
-          : await _ai.generate(
-              transcript: session.plainTranscript,
-              title: session.title,
-            );
+      final note = await _generateNote(id, session);
       await upsert(byId(id)!.copyWith(
         note: note,
         status: SessionStatus.completed,
+        clearErrorMessage: true,
       ));
     } catch (e) {
-      await upsert(byId(id)!.copyWith(status: SessionStatus.error));
+      await upsert(byId(id)!.copyWith(
+        status: SessionStatus.error,
+        errorMessage: _reasonFrom(e),
+      ));
       rethrow;
     }
   }

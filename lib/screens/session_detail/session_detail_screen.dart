@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -58,7 +60,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
   }
 
   void _showError(Object e) {
-    AppToast.error(context, 'Processing failed: $e');
+    // Server-side job failures already carry a human-readable reason (see
+    // SessionProvider._reasonFrom); showing the raw exception on top of it
+    // would just prepend "HttpException: " to text the user can act on.
+    final message = e is HttpException
+        ? e.message
+        : e is StateError
+            ? e.message
+            : 'Processing failed: $e';
+    AppToast.error(context, message);
   }
 
   @override
