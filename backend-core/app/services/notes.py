@@ -31,7 +31,35 @@ faithfully. Respond ONLY with a single JSON object, no prose, matching:
   "actionItems": string[]          // practical takeaways for the listener
 }"""
 
-_client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+class NotesUnavailable(RuntimeError):
+    """The summarizer can't be reached or isn't configured.
+
+    Distinct from a genuine summarization *failure*: this means the
+    feature is switched off or its backend is down, which must not fail
+    the session. Transcription is the primary product here and has
+    already been persisted by the time summarize runs — see
+    routers/processing.py's _run_summarization, which leaves the session
+    at status=transcribed rather than error when this is raised.
+    """
+
+
+# Constructed lazily rather than at import: an unset ANTHROPIC_API_KEY
+# would otherwise only surface deep inside a background job, minutes
+# later, after transcription has already spent GPU time — and editing
+# .env wouldn't take effect without a process restart, since an
+# import-time client captures the key once.
+_client: anthropic.Anthropic | None = None
+
+
+def _get_client() -> anthropic.Anthropic:
+    global _client
+    if not config.ANTHROPIC_API_KEY:
+        raise NotesUnavailable(
+            "AI notes are not configured on this server (ANTHROPIC_API_KEY is unset)."
+        )
+    if _client is None:
+        _client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+    return _client
 
 _FENCE_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)```")
 
@@ -60,18 +88,25 @@ def generate(transcript: str, title: str | None, model: str | None = None) -> di
             "actionItems": [],
         }
 
-    message = _client.messages.create(
-        model=model or config.DEFAULT_NOTES_MODEL,
-        max_tokens=1500,
-        system=_SYSTEM_PROMPT,
-        messages=[
-            {
-                "role": "user",
-                "content": f"Kajian title: {title or '(untitled)'}\n\n"
-                f"Transcript:\n{transcript}",
-            }
-        ],
-    )
+    try:
+        message = _get_client().messages.create(
+            model=model or config.DEFAULT_NOTES_MODEL,
+            max_tokens=1500,
+            system=_SYSTEM_PROMPT,
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"Kajian title: {title or '(untitled)'}\n\n"
+                    f"Transcript:\n{transcript}",
+                }
+            ],
+        )
+    except (anthropic.APIConnectionError, anthropic.APIStatusError) as e:
+        # The summarizer being unreachable or rate-limited is an outage,
+        # not a bad transcript — degrade instead of failing the session.
+        # Genuine bugs (malformed response, bad JSON) still raise normally
+        # below, since those aren't fixed by retrying later.
+        raise NotesUnavailable(f"The notes service is unavailable: {e}") from e
     text = next(
         (block.text for block in message.content if block.type == "text"), "{}"
     )

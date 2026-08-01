@@ -17,6 +17,9 @@ class _FakeCoreApiClient implements CoreApiClientBase {
   /// SessionProvider.regenerateNotes() makes other API calls (upsert ->
   /// updateSession) before reaching summarize, which would consume it.
   bool failSummarize = false;
+  /// Mimics the server settling a session back to `transcribed` with a
+  /// reason when the summarizer is off/down (notes.NotesUnavailable).
+  String? summarizeUnavailable;
 
   _FakeCoreApiClient([Map<String, KajianSession>? seed])
       : remote = seed ?? {};
@@ -126,6 +129,14 @@ class _FakeCoreApiClient implements CoreApiClientBase {
 
   @override
   Future<KajianSession> summarize(String sessionId, {String? model}) async {
+    if (summarizeUnavailable != null) {
+      final updated = remote[sessionId]!.copyWith(
+        status: SessionStatus.transcribed,
+        errorMessage: summarizeUnavailable,
+      );
+      remote[sessionId] = updated;
+      return updated;
+    }
     if (failSummarize) {
       throw const HttpException('Anthropic API rate limited');
     }
@@ -324,6 +335,52 @@ void main() {
       // only channel a failed background job has to explain itself, and
       // what the UI shows instead of a raw exception dump.
       expect(session.errorMessage, 'Anthropic API rate limited');
+    });
+  });
+
+  group('notes unavailable (summarizer off/down)', () {
+    _FakeCoreApiClient seeded() => _FakeCoreApiClient({
+          'ok': _session('ok').copyWith(
+            transcript: [
+              const TranscriptSegment(id: 't1', text: 'ada isi', startMs: 0),
+            ],
+          ),
+        });
+
+    test('leaves the session transcribed, not error', () async {
+      final fake = seeded()..summarizeUnavailable = 'ANTHROPIC_API_KEY is unset.';
+      final provider = SessionProvider(core: fake, syncEnabled: true);
+      await provider.load();
+
+      // Must not throw: an outage in a secondary feature is not a failure
+      // the user has to act on.
+      await provider.regenerateNotes('ok');
+
+      final session = provider.byId('ok')!;
+      expect(session.status, SessionStatus.transcribed);
+      expect(session.errorMessage, 'ANTHROPIC_API_KEY is unset.');
+      expect(session.note, isNull);
+    });
+
+    test('keeps the transcript readable', () async {
+      final fake = seeded()..summarizeUnavailable = 'Notes service down.';
+      final provider = SessionProvider(core: fake, syncEnabled: true);
+      await provider.load();
+
+      await provider.regenerateNotes('ok');
+
+      // The whole point of degrading rather than failing.
+      expect(provider.byId('ok')!.hasTranscript, isTrue);
+      expect(provider.byId('ok')!.plainTranscript, 'ada isi');
+    });
+
+    test('a genuine summarize failure still marks the session error', () async {
+      final fake = seeded()..failSummarize = true;
+      final provider = SessionProvider(core: fake, syncEnabled: true);
+      await provider.load();
+
+      await expectLater(provider.regenerateNotes('ok'), throwsA(anything));
+      expect(provider.byId('ok')!.status, SessionStatus.error);
     });
   });
 
