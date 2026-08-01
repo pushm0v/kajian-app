@@ -11,6 +11,23 @@ import '../services/core_api_client.dart';
 import '../services/settings_service.dart';
 import '../services/storage_service.dart';
 
+/// Thrown when AI notes can't be produced because the summarizer is
+/// switched off or unreachable — as opposed to failing on a given
+/// transcript.
+///
+/// Kept distinct so the UI can degrade instead of erroring: the
+/// transcript is the primary product and is already saved by the time
+/// summarization runs, so an outage here leaves a perfectly usable
+/// session. See backend-core's notes.NotesUnavailable, the server-side
+/// counterpart.
+class NotesUnavailable implements Exception {
+  final String message;
+  const NotesUnavailable(this.message);
+
+  @override
+  String toString() => message;
+}
+
 /// Owns the list of saved kajian sessions and the post-recording processing
 /// pipeline (transcription -> AI notes).
 ///
@@ -213,6 +230,15 @@ class SessionProvider extends ChangeNotifier {
         status: SessionStatus.completed,
         clearErrorMessage: true,
       ));
+    } on NotesUnavailable catch (e) {
+      // Not a failure: the recording transcribed fine and is readable.
+      // Settle at `transcribed` with the reason attached so NotesView can
+      // explain itself, and don't rethrow — there's nothing for the user
+      // to fix, and a toast would misrepresent a working session.
+      await upsert(byId(id)!.copyWith(
+        status: SessionStatus.transcribed,
+        errorMessage: e.message,
+      ));
     } catch (e) {
       await upsert(byId(id)!.copyWith(
         status: SessionStatus.error,
@@ -239,6 +265,16 @@ class SessionProvider extends ChangeNotifier {
     final updated = await _core.summarize(id);
     final note = updated.note;
     if (note == null) {
+      // The server settles a session back to `transcribed` (not `error`)
+      // when the summarizer is off or down — notes are secondary and the
+      // transcript is already saved. Preserve that distinction here rather
+      // than overwriting it with `error`, so the notes tab can say
+      // "unavailable" and offer a retry.
+      if (updated.status == SessionStatus.transcribed) {
+        throw NotesUnavailable(
+          updated.errorMessage ?? 'AI notes are unavailable right now.',
+        );
+      }
       throw StateError(
         updated.errorMessage ??
             'The server finished summarizing but returned no notes.',
@@ -306,6 +342,15 @@ class SessionProvider extends ChangeNotifier {
         note: note,
         status: SessionStatus.completed,
         clearErrorMessage: true,
+      ));
+    } on NotesUnavailable catch (e) {
+      // Not a failure: the recording transcribed fine and is readable.
+      // Settle at `transcribed` with the reason attached so NotesView can
+      // explain itself, and don't rethrow — there's nothing for the user
+      // to fix, and a toast would misrepresent a working session.
+      await upsert(byId(id)!.copyWith(
+        status: SessionStatus.transcribed,
+        errorMessage: e.message,
       ));
     } catch (e) {
       await upsert(byId(id)!.copyWith(

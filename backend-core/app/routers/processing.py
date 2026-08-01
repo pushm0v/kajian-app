@@ -339,6 +339,20 @@ async def _run_summarization(session_id: str, user_id, model: str | None) -> Non
             result_data = await anyio.to_thread.run_sync(
                 notes.generate, plain_transcript, session.title, model
             )
+        except notes.NotesUnavailable as e:
+            # Notes are a secondary product: the transcript is already
+            # persisted and readable by the time this runs, so a summarizer
+            # that's switched off or down must not mark the whole session
+            # failed. Settle back to `transcribed` — a real, terminal state
+            # the client can stop polling on — and record why, so the app
+            # can say "notes unavailable" rather than showing an error or
+            # an empty tab it can't explain. Retrying summarize later works
+            # without re-transcribing.
+            logger.warning("summarize_session %s: notes unavailable: %s", session_id, e)
+            session.status = SessionStatus.transcribed
+            session.error_message = str(e)
+            await db.commit()
+            return
         except Exception as e:  # noqa: BLE001 - background task has no caller to raise to
             logger.exception("summarize_session %s: failed", session_id)
             await _mark_failed(db, session_id, user_id, f"Summarize failed: {e}")

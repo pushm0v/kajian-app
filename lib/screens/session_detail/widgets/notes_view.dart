@@ -90,19 +90,39 @@ class NotesView extends StatelessWidget {
 
   Widget _empty(BuildContext context) {
     final theme = Theme.of(context);
+    // The server leaves a session at `transcribed` with a reason when the
+    // summarizer is switched off or down (see backend-core's
+    // notes.NotesUnavailable) — the transcript itself is fine, so this is
+    // a degraded state rather than a failure. Saying so beats the generic
+    // "No notes yet" prompt, which would invite the user to tap Generate
+    // and hit the same outage again with no explanation.
+    final unavailable = session.status == SessionStatus.transcribed &&
+        (session.errorMessage?.isNotEmpty ?? false);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.auto_awesome,
-                size: 56, color: theme.colorScheme.primary),
+            Icon(
+              unavailable ? Icons.cloud_off_outlined : Icons.auto_awesome,
+              size: 56,
+              color: unavailable
+                  ? theme.colorScheme.onSurfaceVariant
+                  : theme.colorScheme.primary,
+            ),
             const SizedBox(height: 16),
-            Text('No notes yet', style: theme.textTheme.headlineSmall),
+            Text(
+              unavailable ? 'Notes unavailable' : 'No notes yet',
+              style: theme.textTheme.headlineSmall,
+            ),
             const SizedBox(height: 8),
             Text(
-              'Generate AI notes from the transcript: a summary, key points, and Quran/Hadith references.',
+              unavailable
+                  ? '${session.errorMessage}\n\n'
+                      'Your transcript is saved — you can read it in the '
+                      'Transcript tab, and generate notes later.'
+                  : 'Generate AI notes from the transcript: a summary, key points, and Quran/Hadith references.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
@@ -110,8 +130,8 @@ class NotesView extends StatelessWidget {
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: onGenerate,
-              icon: const Icon(Icons.auto_awesome),
-              label: const Text('Generate notes'),
+              icon: Icon(unavailable ? Icons.refresh : Icons.auto_awesome),
+              label: Text(unavailable ? 'Try again' : 'Generate notes'),
             ),
           ],
         ),
