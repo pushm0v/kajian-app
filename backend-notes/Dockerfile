@@ -27,10 +27,17 @@ WORKDIR /srv
 
 COPY requirements.txt .
 # --break-system-packages: Ubuntu 24.04 marks the system Python as
-# externally managed (PEP 668). This is a single-purpose container, so
-# installing into the system interpreter is fine and avoids a venv layer.
-RUN python3 -m pip install --break-system-packages --upgrade pip \
-    && python3 -m pip install --break-system-packages -r requirements.txt
+# externally managed (PEP 668), so apt's pip refuses a bare `pip install`
+# outside a venv. Safe here — this image exists solely to run this one
+# app, so there's no other system Python consumer to protect.
+#
+# Deliberately NOT running `pip install --upgrade pip` first: apt's pip
+# package (24.0) is installed without the RECORD metadata file pip's own
+# in-place-upgrade path expects, so pip trying to uninstall itself to
+# upgrade fails ("Cannot uninstall pip 24.0, RECORD file not found").
+# 24.0 installs everything in requirements.txt correctly. Same reasoning
+# as ../backend/Dockerfile, which hit this first.
+RUN python3 -m pip install --break-system-packages -r requirements.txt
 
 COPY app ./app
 
