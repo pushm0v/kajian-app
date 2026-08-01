@@ -180,6 +180,15 @@ class TranscribeRequestIn(BaseModel):
     speakerEmbeddingModel: str = ""
 
 
+class TranscribeChunkOut(BaseModel):
+    """One live-audio chunk's transcription (see routers/streaming.py's
+    POST /transcribe-chunk). Just the joined text — chunks are display-only
+    while recording and are never persisted, so there's no id/session/
+    timing to return."""
+
+    text: str
+
+
 class SummarizeRequestIn(BaseModel):
     model: str | None = None
 
