@@ -84,9 +84,17 @@ WHISPER_BACKEND_TOKEN = os.environ.get("WHISPER_BACKEND_TOKEN", "")
 EMBEDDING_BACKEND_URL = os.environ.get("EMBEDDING_BACKEND_URL", "")
 EMBEDDING_BACKEND_TOKEN = os.environ.get("EMBEDDING_BACKEND_TOKEN", "")
 
-# --- AI notes (Anthropic) ----------------------------------------------------
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-DEFAULT_NOTES_MODEL = os.environ.get("DEFAULT_NOTES_MODEL", "claude-sonnet-5")
+# --- AI notes (self-hosted) --------------------------------------------------
+# Base URL of the notes service (../backend-notes/), which runs a
+# quantized Qwen2.5-7B locally. Replaces the previous Anthropic API call:
+# no external key, and transcripts never leave the host.
+#
+# Empty means notes are switched off — services/notes.py raises
+# NotesUnavailable, and a session still completes transcription and
+# settles at `transcribed` rather than failing (see
+# routers/processing.py's _run_summarization).
+NOTES_BACKEND_URL = os.environ.get("NOTES_BACKEND_URL", "")
+NOTES_BACKEND_TOKEN = os.environ.get("NOTES_BACKEND_TOKEN", "")
 
 # --- Speaker voice-fingerprint matching --------------------------------------
 # Minimum cosine similarity (0-1) for a stored speaker to be surfaced as a

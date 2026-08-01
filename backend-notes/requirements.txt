@@ -1,0 +1,17 @@
+fastapi>=0.115
+uvicorn[standard]>=0.32
+anyio>=4.0
+# vLLM pins numba==0.61.2, and numba 0.61.2 only supports numpy up to 2.2
+# (https://numba.readthedocs.io/en/stable/release/0.61.2-notes.html).
+# vLLM's own requirements leave numpy unpinned, so an unconstrained
+# `numpy` lets pip resolve a too-new one that silently breaks numba's
+# compiled ABI — no import error, just a segfault the first time its
+# JIT-compiled code runs, during vLLM's dummy forward pass at engine
+# startup. This bit the ASR backend; keep it pinned here too.
+numpy>=1.26,<2.3
+numba==0.61.2
+# Same vLLM version the ASR backend runs (../backend/requirements.txt),
+# already proven against this host's driver and CUDA 13.2 base image.
+vllm==0.19.1
+# AWQ 4-bit dequantization kernels for Qwen2.5-7B-Instruct-AWQ.
+autoawq>=0.2.7

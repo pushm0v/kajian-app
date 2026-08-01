@@ -1,0 +1,52 @@
+services:
+  kajian-notes:
+    build: .
+    ports:
+      # Distinct from ../backend/'s 8080/8081, ../backend-whisper/'s 8082,
+      # and ../backend-embedding/'s 8083.
+      - "8084:8080"
+    env_file:
+      - .env
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      # Persists downloaded weights (~5.5GB) across container restarts.
+      - notes-hf-cache:/srv/.cache/huggingface
+    # vLLM's worker processes communicate over shared memory. Docker's
+    # default /dev/shm is 64MB, nowhere near enough — without this the
+    # process crashes (often silently, no traceback) as it starts loading
+    # the model, and `restart: unless-stopped` spins it straight back into
+    # the same crash. Learned the hard way on ../backend/.
+    #
+    # Use ONLY shm_size — do not also bind-mount the host's /dev/shm, which
+    # overrides the tmpfs this creates and causes a different failure.
+    shm_size: "8gb"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              # Device 0, SHARED with ../backend-embedding/. That sharing
+              # is deliberate and is why NOTES_GPU_MEMORY_UTILIZATION
+              # defaults to 0.55: vLLM reserves its share upfront and never
+              # releases it, while the embedding service's ONNX Runtime
+              # CUDA session allocates on demand and needs room left for it.
+              #
+              # ../backend/ (Qwen/vLLM ASR) also claims this device and
+              # must stay STOPPED — at its 0.8 reservation there is no room
+              # for either of these services alongside it.
+              device_ids: ['0']
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # First boot downloads ~5.5GB of weights, then vLLM's engine startup
+      # (eager mode) takes a further minute or two.
+      start_period: 600s
+
+volumes:
+  notes-hf-cache:
