@@ -13,6 +13,10 @@ import 'package:kajian_app/services/core_api_client.dart';
 class _FakeCoreApiClient implements CoreApiClientBase {
   final Map<String, KajianSession> remote;
   bool failNextCall = false;
+  /// Fails every summarize() call, unlike the one-shot [failNextCall] —
+  /// SessionProvider.regenerateNotes() makes other API calls (upsert ->
+  /// updateSession) before reaching summarize, which would consume it.
+  bool failSummarize = false;
 
   _FakeCoreApiClient([Map<String, KajianSession>? seed])
       : remote = seed ?? {};
@@ -67,6 +71,16 @@ class _FakeCoreApiClient implements CoreApiClientBase {
   }
 
   @override
+  Future<KajianSession> getSession(String id) async {
+    _maybeFail();
+    final session = remote[id];
+    if (session == null) {
+      throw StateError('Session $id not found');
+    }
+    return session;
+  }
+
+  @override
   Future<KajianSession> replaceTranscript(
     String sessionId,
     List<TranscriptSegment> segments,
@@ -112,6 +126,9 @@ class _FakeCoreApiClient implements CoreApiClientBase {
 
   @override
   Future<KajianSession> summarize(String sessionId, {String? model}) async {
+    if (failSummarize) {
+      throw const HttpException('Anthropic API rate limited');
+    }
     _maybeFail();
     final note = KajianNote(summary: 'Server summary', generatedAt: DateTime(2026));
     final updated = remote[sessionId]!.copyWith(note: note);
@@ -249,6 +266,85 @@ void main() {
       await provider.load();
 
       expect(provider.byId('offline-only'), isNotNull);
+    });
+  });
+
+  // Regression tests for the 400 "Session has no transcript yet" the
+  // server returns when summarize runs against an empty transcript.
+  group('summarize guards', () {
+    test('regenerateNotes() throws a readable error when there is no transcript',
+        () async {
+      final fake = _FakeCoreApiClient();
+      final provider = SessionProvider(core: fake, syncEnabled: true);
+      await provider.upsert(_session('no-transcript'));
+
+      // Previously returned silently, so the button appeared to do
+      // nothing; the server path would have 400'd.
+      await expectLater(
+        provider.regenerateNotes('no-transcript'),
+        throwsA(isA<StateError>().having(
+          (e) => e.message, 'message', contains('no transcript'),
+        )),
+      );
+    });
+
+    test('process() marks the session as error, not completed, when '
+        'transcription yields nothing', () async {
+      final fake = _FakeCoreApiClient();
+      final provider = SessionProvider(core: fake, syncEnabled: true);
+      // No audioFilePath => transcription step is skipped entirely, so the
+      // transcript stays empty, which is the state that triggered the 400.
+      await provider.upsert(_session('empty'));
+
+      await provider.process('empty');
+
+      final session = provider.byId('empty')!;
+      expect(session.status, SessionStatus.error);
+      expect(session.errorMessage, isNotNull);
+      expect(session.errorMessage, contains('nothing to summarize'));
+    });
+
+    test('a failed summarize records the reason on the session', () async {
+      final fake = _FakeCoreApiClient({
+        'boom': _session('boom').copyWith(
+          transcript: [
+            const TranscriptSegment(id: 't1', text: 'ada isi', startMs: 0),
+          ],
+        ),
+      });
+      final provider = SessionProvider(core: fake, syncEnabled: true);
+      await provider.load();
+
+      fake.failSummarize = true;
+      await expectLater(provider.regenerateNotes('boom'), throwsA(anything));
+
+      final session = provider.byId('boom')!;
+      expect(session.status, SessionStatus.error);
+      // The server's own reason must survive onto the session — that's the
+      // only channel a failed background job has to explain itself, and
+      // what the UI shows instead of a raw exception dump.
+      expect(session.errorMessage, 'Anthropic API rate limited');
+    });
+  });
+
+  group('KajianSession.errorMessage', () {
+    test('round-trips through toJson/fromJson', () {
+      final session = _session('s1').copyWith(
+        status: SessionStatus.error,
+        errorMessage: 'ASR worker unreachable',
+      );
+      final restored = KajianSession.fromJson(session.toJson());
+      expect(restored.errorMessage, 'ASR worker unreachable');
+      expect(restored.status, SessionStatus.error);
+    });
+
+    test('copyWith clears it only when explicitly asked', () {
+      final failed = _session('s1').copyWith(errorMessage: 'boom');
+      // A normal copyWith must preserve it...
+      expect(failed.copyWith(title: 'renamed').errorMessage, 'boom');
+      // ...and clearing needs the explicit flag, since `errorMessage: null`
+      // is indistinguishable from "not passed" in the ?? pattern.
+      expect(failed.copyWith(clearErrorMessage: true).errorMessage, isNull);
     });
   });
 }

@@ -2,18 +2,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/config/app_config.dart';
 
-/// How the accurate (post-recording) transcription pass is produced.
-enum TranscriptionMode {
-  /// Send the recorded audio to the backend Whisper API.
-  cloud,
-
-  /// Transcribe entirely on-device with whisper.cpp (whisper_ggml).
-  onDevice,
-}
-
-/// Which self-hosted cloud model handles transcription when
-/// [TranscriptionMode.cloud] is selected. Both speak the same
-/// `POST /transcribe` contract; they differ in the model behind it.
+/// Which self-hosted cloud model handles transcription. Both speak the
+/// same `POST /transcribe` contract; they differ in the model behind it.
+///
+/// There is no on-device option any more: whisper.cpp (whisper_ggml) ran
+/// a small `base` model downloaded to the phone, which was meaningfully
+/// worse than the self-hosted large-v3 the backend serves, and it forced
+/// an ffmpeg_kit dependency override to keep iOS simulator builds linking.
+/// All transcription now goes to the cloud.
 enum CloudModel { qwen, whisper }
 
 extension CloudModelInfo on CloudModel {
@@ -45,43 +41,10 @@ extension CloudModelInfo on CloudModel {
   bool get isConfigured => baseUrl.isNotEmpty;
 }
 
-extension TranscriptionModeLabel on TranscriptionMode {
-  String get label => switch (this) {
-        TranscriptionMode.cloud => 'Cloud (Whisper API)',
-        TranscriptionMode.onDevice => 'Di perangkat (offline)',
-      };
-
-  String get description => switch (this) {
-        TranscriptionMode.cloud =>
-          'Mengirim rekaman ke server untuk ditranskrip. Membutuhkan '
-              'koneksi internet.',
-        TranscriptionMode.onDevice =>
-          'Transkrip sepenuhnya di perangkat ini. Bisa dipakai offline; '
-              'penggunaan pertama akan mengunduh model suara.',
-      };
-}
-
 /// Persisted user preferences, backed by [SharedPreferences].
 class SettingsService {
-  static const _keyTranscriptionMode = 'transcription_mode';
   static const _keyCloudLiveCaptions = 'cloud_live_captions_enabled';
   static const _keyCloudModel = 'cloud_model';
-
-  Future<TranscriptionMode> getTranscriptionMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_keyTranscriptionMode);
-    return TranscriptionMode.values.firstWhere(
-      (m) => m.name == raw,
-      // On-device works with no backend required; cloud mode returns mock
-      // data until a backend is configured, so don't default to it silently.
-      orElse: () => TranscriptionMode.onDevice,
-    );
-  }
-
-  Future<void> setTranscriptionMode(TranscriptionMode mode) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyTranscriptionMode, mode.name);
-  }
 
   /// Whether live captions during recording should also stream to the
   /// self-hosted cloud model (backend/app/streaming.py), alongside the
@@ -98,7 +61,7 @@ class SettingsService {
     await prefs.setBool(_keyCloudLiveCaptions, enabled);
   }
 
-  /// Which cloud model handles transcription in [TranscriptionMode.cloud].
+  /// Which cloud model handles transcription.
   /// Defaults to whichever is configured (preferring the saved choice), so a
   /// single-backend setup still resolves to a usable model.
   Future<CloudModel> getCloudModel() async {

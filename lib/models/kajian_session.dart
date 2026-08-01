@@ -55,6 +55,14 @@ class KajianSession {
   final KajianNote? note;
   final SessionStatus status;
 
+  /// Why the last server-side job failed, when [status] is
+  /// [SessionStatus.error]. Set by backend-core's background transcribe/
+  /// summarize tasks (see its routers/processing.py) and surfaced to the
+  /// user instead of a raw HTTP error — those jobs return 202 immediately,
+  /// so a failure has no request left to fail; this field is the only
+  /// channel that carries the reason back. Null when nothing has failed.
+  final String? errorMessage;
+
   const KajianSession({
     required this.id,
     required this.title,
@@ -68,6 +76,7 @@ class KajianSession {
     this.transcript = const [],
     this.note,
     this.status = SessionStatus.recorded,
+    this.errorMessage,
   });
 
   /// Full transcript joined into a single plain-text string.
@@ -88,6 +97,11 @@ class KajianSession {
     List<TranscriptSegment>? transcript,
     KajianNote? note,
     SessionStatus? status,
+    String? errorMessage,
+    // `errorMessage: null` can't distinguish "leave unchanged" from "clear
+    // it" in the ?? pattern below, and clearing is exactly what a retry
+    // needs to do — hence an explicit flag.
+    bool clearErrorMessage = false,
   }) {
     return KajianSession(
       id: id,
@@ -102,6 +116,8 @@ class KajianSession {
       transcript: transcript ?? this.transcript,
       note: note ?? this.note,
       status: status ?? this.status,
+      errorMessage:
+          clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
     );
   }
 
@@ -118,6 +134,7 @@ class KajianSession {
         'transcript': transcript.map((s) => s.toJson()).toList(),
         'note': note?.toJson(),
         'status': status.name,
+        'errorMessage': errorMessage,
       };
 
   factory KajianSession.fromJson(Map<String, dynamic> json) {
@@ -145,6 +162,7 @@ class KajianSession {
         (s) => s.name == json['status'],
         orElse: () => SessionStatus.recorded,
       ),
+      errorMessage: json['errorMessage'] as String?,
     );
   }
 }
