@@ -17,19 +17,106 @@ batch endpoint.
 from __future__ import annotations
 
 import logging
+import os
+import uuid
 
 import anyio
 import websockets
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from websockets.exceptions import ConnectionClosed
 
-from .. import config
-from ..auth import current_user_ws
+from .. import config, schemas
+from ..auth import current_user, current_user_ws
 from ..db import SessionLocal
+from ..models.user import User
+from ..services import asr_proxy
 
 logger = logging.getLogger("kajian_core")
 
 router = APIRouter(tags=["streaming"])
+
+# A ~20s mono 16kHz PCM16 WAV is ~640KB; this leaves generous headroom for
+# longer or higher-rate chunks while still rejecting anything that's
+# clearly a whole recording sent to the wrong endpoint.
+_MAX_CHUNK_BYTES = 25 * 1024 * 1024
+
+
+@router.post("/transcribe-chunk", response_model=schemas.TranscribeChunkOut)
+async def transcribe_chunk(
+    audio: UploadFile = File(...),
+    locale: str = Form(default="id_ID"),
+    model: str = Form(default="whisper"),
+    user: User = Depends(current_user),
+) -> schemas.TranscribeChunkOut:
+    """Transcribes one short slice of live audio and returns its text.
+
+    Stateless by design: no session, no DB write, nothing persisted. This
+    backs the app's chunked live-caption mode, where the recorder ships a
+    ~20s window every few seconds purely so the user sees text appear
+    while they record. The authoritative transcript still comes from the
+    batch POST /sessions/{id}/transcribe pass over the whole recording
+    once recording stops — that pass has full-file context, which per-chunk
+    inference cannot match, so nothing here is worth persisting.
+
+    Why this exists at all: WS /transcribe/stream (below) only works
+    against the Qwen worker, since faster-whisper has no incremental
+    decoding API. Chunking is how Whisper does "live" — each chunk is an
+    ordinary independent transcription. The app overlaps consecutive
+    chunks and stitches them client-side (see
+    ChunkedTranscriptionService), because a word straddling a cut would
+    otherwise be mangled in both neighbours.
+
+    Deliberately NOT reusing the session /transcribe endpoint: that one
+    reads audio from S3 and *overwrites* the session transcript, which
+    would be wrong per-chunk and would round-trip through object storage
+    for audio that is thrown away seconds later.
+    """
+    suffix = os.path.splitext(audio.filename or "")[1] or ".wav"
+    tmp_path = os.path.join(config.WORK_DIR, f"chunk-{uuid.uuid4().hex}{suffix}")
+
+    size = 0
+    os.makedirs(config.WORK_DIR, exist_ok=True)
+    try:
+        with open(tmp_path, "wb") as f:
+            while data := await audio.read(1024 * 1024):
+                size += len(data)
+                if size > _MAX_CHUNK_BYTES:
+                    raise HTTPException(status_code=413, detail="Audio chunk too large")
+                f.write(data)
+
+        try:
+            asr_model = asr_proxy.AsrModel(model)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=f"Unknown model: {model}") from e
+
+        try:
+            result = await asr_proxy.transcribe(asr_model, tmp_path, locale)
+        except asr_proxy.AsrModelUnavailable as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+
+        segments = result.get("segments", [])
+        text = " ".join(
+            s.get("text", "").strip() for s in segments if s.get("text", "").strip()
+        )
+        logger.info(
+            "transcribe_chunk: user=%s bytes=%d -> %d segment(s), %d char(s)",
+            user.id, size, len(segments), len(text),
+        )
+        return schemas.TranscribeChunkOut(text=text)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 
 def _worker_ws_url(locale: str) -> str:
