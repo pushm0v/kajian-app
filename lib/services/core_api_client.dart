@@ -24,6 +24,7 @@ abstract class CoreApiClientBase {
     SessionStatus? status,
   });
   Future<void> deleteSession(String id);
+  Future<KajianSession> getSession(String id);
   Future<KajianSession> replaceTranscript(
     String sessionId,
     List<TranscriptSegment> segments,
@@ -141,6 +142,16 @@ class CoreApiClient implements CoreApiClientBase {
   }
 
   @override
+  Future<KajianSession> getSession(String id) async {
+    final response = await _client.get(
+      _uri('/sessions/$id'),
+      headers: await _jsonHeaders(),
+    );
+    _checkOk(response);
+    return _sessionFromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  @override
   Future<KajianSession> replaceTranscript(
     String sessionId,
     List<TranscriptSegment> segments,
@@ -229,7 +240,7 @@ class CoreApiClient implements CoreApiClientBase {
       body: jsonEncode({'model': model}),
     );
     _checkOk(response);
-    return _sessionFromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return _pollUntilDone(sessionId, SessionStatus.transcribing);
   }
 
   @override
@@ -240,7 +251,49 @@ class CoreApiClient implements CoreApiClientBase {
       body: jsonEncode({if (model != null) 'model': model}),
     );
     _checkOk(response);
-    return _sessionFromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return _pollUntilDone(sessionId, SessionStatus.summarizing);
+  }
+
+  /// Waits for a background job to leave [running], then returns the final
+  /// session.
+  ///
+  /// Both /transcribe and /summarize return 202 immediately with the job
+  /// only *scheduled* — the response body carries no transcript or note
+  /// (see backend-core's routers/processing.py). They're async because a
+  /// long recording can outlive Cloudflare's fixed 125s proxy read
+  /// timeout, which no amount of client patience can extend. So the result
+  /// has to be fetched by polling GET /sessions/{id} rather than read off
+  /// the POST response.
+  ///
+  /// Throws [HttpException] carrying the server's own error_message when
+  /// the job ends in [SessionStatus.error] — that field is the only
+  /// channel a failed background job has to explain itself, since its
+  /// request was answered long before it ran.
+  Future<KajianSession> _pollUntilDone(
+    String sessionId,
+    SessionStatus running,
+  ) async {
+    // Poll fast at first (short jobs finish in seconds), then back off to
+    // avoid hammering the server for the length of a 45-minute recording.
+    const interval = Duration(seconds: 3);
+    const timeout = Duration(minutes: 30);
+
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(interval);
+      final session = await getSession(sessionId);
+      if (session.status == running) continue;
+      if (session.status == SessionStatus.error) {
+        throw HttpException(
+          session.errorMessage ?? 'The server job failed without a reason.',
+        );
+      }
+      return session;
+    }
+    throw HttpException(
+      'Timed out after ${timeout.inMinutes} minutes waiting for the server. '
+      'The job may still be running — reopen this session later to check.',
+    );
   }
 
   KajianSession _sessionFromJson(Map<String, dynamic> json) {
@@ -271,6 +324,7 @@ class CoreApiClient implements CoreApiClientBase {
         (s) => s.name == json['status'],
         orElse: () => SessionStatus.recorded,
       ),
+      errorMessage: json['errorMessage'] as String?,
     );
   }
 
